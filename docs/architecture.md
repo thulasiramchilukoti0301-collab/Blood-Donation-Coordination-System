@@ -24,7 +24,7 @@ React client  -- HTTP/JSON -->  Express API  -- mysql2 -->  MySQL
 - Backend modules separate route handling, validation, authentication/authorization, domain operations, and data access.
 - `mysql2` provides pooled MySQL connectivity and parameterized queries.
 - The server validates inputs and applies role checks and domain rules, including eligibility, compatibility, request status transitions, allocation, and inventory changes.
-- Passwords are stored as bcrypt hashes. Select JWT or secure session-based authentication before implementation and apply it consistently.
+- Passwords are stored as bcrypt hashes. Phase 1 selects server-side sessions with an opaque, secure cookie; see `docs/api-design.md` for the proposed behavior.
 - Secrets and database connection settings are supplied via environment-specific configuration and excluded from version control.
 - Significant operations write audit records without including credentials or tokens.
 
@@ -54,7 +54,6 @@ React client  -- HTTP/JSON -->  Express API  -- mysql2 -->  MySQL
 
 ## Architecture decisions deferred
 
-- JWT versus secure sessions
 - Detailed API route and payload contracts
 - Exact schema, major-table definition, and sample-data distribution
 - Specific scheduled expiry mechanism

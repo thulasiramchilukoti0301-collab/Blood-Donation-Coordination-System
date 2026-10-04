@@ -1,21 +1,21 @@
 # Development Plan
 
-This plan divides the project into reviewable phases. Only the planning phase is complete at this point. Do not begin a later phase without explicit user instruction.
+This plan divides the project into reviewable phases. Phases 0 and 1 are complete as documentation/design work. Do not begin a later phase without explicit user instruction.
 
-## Phase 0 — Scope and project conventions (current)
+## Phase 0 — Scope and project conventions (complete)
 
 - Inspect repository state.
 - Record scope, proposed architecture, implementation phases, and repository conventions.
 - Review the documents for consistency.
 - **Deliverables:** `AGENTS.md`, `docs/project-scope.md`, `docs/architecture.md`, `docs/development-plan.md`.
 
-## Phase 1 — Requirements and detailed design
+## Phase 1 — Requirements and detailed design (complete)
 
-- Confirm role permissions and workflow rules within the approved scope.
-- Define donor eligibility and blood compatibility rules, request status transitions, and allocation behavior.
-- Decide authentication approach (JWT or secure sessions), major-table boundaries, and scheduled expiry mechanism.
-- Produce screen outline and API contract at a level sufficient for implementation.
-- **Deliverables:** reviewed design notes; no application implementation unless separately authorized.
+- Define role permissions, donor/donation/unit/request lifecycles, compatibility and allocation behavior, audit requirements, searches, and initial reports.
+- Choose secure server-side sessions with bcrypt for authentication.
+- Produce preliminary API contract and candidate database entities/relationships without finalizing a schema.
+- Record unresolved policy and implementation decisions for Phase 2 review.
+- **Deliverables:** `docs/requirements.md`, `docs/domain-rules.md`, `docs/role-permissions.md`, `docs/api-design.md`, and `docs/database-design-inputs.md`; no application implementation or SQL artifacts.
 
 ## Phase 2 — Database design
 
