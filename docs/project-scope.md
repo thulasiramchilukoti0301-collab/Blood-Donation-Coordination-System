@@ -10,7 +10,7 @@
 - Backend: Node.js and Express
 - Database: MySQL
 - Node.js database driver: `mysql2`
-- Authentication: bcrypt password hashing and either JWT or secure session-based authentication; select one approach during design before implementation
+- Authentication: bcrypt password hashing and server-side sessions (selected in Phase 1)
 - Charts: Chart.js
 - Development environment: VS Code
 - Version control: Git and GitHub
@@ -21,7 +21,7 @@
 2. **Hospital** — registers and signs in, submits blood requests with a priority, and follows request status.
 3. **Donor** — registers and manages a donor profile, checks eligibility, and books a donation slot.
 
-Authorization must ensure each role can access only the operations and records needed for its responsibilities. Exact permissions are to be specified during detailed design.
+Authorization must ensure each role can access only the operations and records needed for its responsibilities. The approved role permissions are documented in `docs/role-permissions.md`.
 
 ## Functional scope
 
@@ -58,7 +58,7 @@ The database deliverables must demonstrate:
 - SQL DDL and DML artifacts
 - ER diagram, relational schema, and normalization through 3NF
 
-The major tables and the method for implementing scheduled expiry are design decisions for the database phase; this scope does not prescribe a schema.
+The major-table list and scheduled expiry design are documented in `docs/database-design.md`; implementation details remain subject to Phase 3 environment checks.
 
 ## Application and submission requirements
 

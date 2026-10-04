@@ -38,13 +38,13 @@ This document turns the approved project scope into requirements for the college
 | Eligibility and next eligible date | `domain-rules.md` |
 | Slot booking/cancellation | `domain-rules.md`, `api-design.md` |
 | Donation recording | `domain-rules.md`, `role-permissions.md`, `api-design.md` |
-| Blood-unit creation/tracking and blood groups | `domain-rules.md`, `database-design-inputs.md` |
-| Expiry and scheduled handling | `domain-rules.md`, `database-design-inputs.md` |
+| Blood-unit creation/tracking and blood groups | `domain-rules.md`, `database-design.md` |
+| Expiry and scheduled handling | `domain-rules.md`, `database-design.md` |
 | Hospital registration/login/requests | `role-permissions.md`, `domain-rules.md`, `api-design.md` |
 | Priorities, compatibility, allocation, request status | `domain-rules.md`, `api-design.md` |
-| Inventory, audit, dashboard/reports | `role-permissions.md`, `api-design.md`, `database-design-inputs.md` |
+| Inventory, audit, dashboard/reports | `role-permissions.md`, `api-design.md`, `database-design.md` |
 | Authentication/input validation/connectivity | `api-design.md` |
-| ERD/schema/3NF/SQL/DBMS demonstrations | `database-design-inputs.md` |
+| ERD/schema/3NF/SQL/DBMS demonstrations | `database-design.md`, `relational-schema.md`, `normalization.md`, `er-design.md` |
 
 ## DBMS demonstration mapping
 
@@ -58,13 +58,13 @@ This document turns the approved project scope into requirements for the college
 | SUM | Requested/allocated unit quantities over a date range. |
 | AVG | Average donation-to-approval duration or request fulfillment duration, only for completed records and with clearly stated units. |
 | GROUP BY | Group inventory/request/donation aggregates by blood group, status, priority, and period. |
-| View | Candidate read-only inventory availability summary or request fulfillment summary; select during Phase 2. |
-| Stored procedure/function | Candidate transactional allocation routine or eligibility/availability helper; choose one in Phase 2. |
-| Trigger | Candidate audit/status integrity event for a defined table change; select exact trigger and avoid duplicating application audit events in Phase 2. |
-| Scheduled expiry | Scheduled database event or application scheduler marks eligible inventory expired, with traceable audit; mechanism chosen in Phase 2. |
-| 10+ sample records per major table | Define the major-table list and deterministic sample-data strategy in Phase 2. |
-| DDL/DML, ERD, relational schema, 3NF | SQL and design documentation in Phase 2. |
+| View | `v_available_inventory_by_group`, specified in `database-design.md`. |
+| Stored procedure/function | Transactional FEFO allocation procedure `sp_allocate_request_units`. |
+| Trigger | `trg_request_status_history_update` records request status changes. |
+| Scheduled expiry | Daily MySQL Event Scheduler design with run and per-unit audit events, subject to environment support. |
+| 10+ sample records per major table | Twelve major tables are listed in `database-design.md`; Phase 3 supplies ten or more rows for each. |
+| DDL/DML, ERD, relational schema, 3NF | ERD, relational design, and 3NF notes are complete; executable DDL/DML belong to Phase 3. |
 
 ## Phase status
 
-Phase 1 documents define the workflow and preliminary interface, but do not finalize the physical schema or authorize implementation. Open choices are listed in `database-design-inputs.md` and `domain-rules.md`.
+Phase 1 requirements and Phase 2 logical database design are complete. Physical SQL and environment validation remain for Phase 3, which requires explicit user approval.

@@ -7,8 +7,9 @@ This repository is for the **Blood Bank and Donor Network**, a college DBMS Labo
 ## Workflow boundaries
 
 - Work only on the phase the user explicitly authorizes. Planning documents do not authorize implementation.
+- Phase 2 database design is complete. Phase 3 database implementation is the next phase and may begin only after the user explicitly approves it.
 - Do not create application code, database tables, migrations, or sample data until implementation is explicitly requested.
-- Do not install dependencies, alter Git configuration, or commit unless explicitly requested.
+- Do not create executable SQL, install dependencies, alter Git configuration, or commit/push unless explicitly requested.
 - Keep the application within the agreed scope in `docs/project-scope.md`; ask before adding features that change it materially.
 - Preserve existing user work. Review repository state before editing files.
 
@@ -16,7 +17,7 @@ This repository is for the **Blood Bank and Donor Network**, a college DBMS Labo
 
 - Use React for the frontend and Node.js/Express for the API backend.
 - Use MySQL as the system of record and `mysql2` for Node.js database access. Keep credentials outside source control in environment-specific configuration.
-- Hash passwords with bcrypt. Use JWT or secure session-based authentication; document and apply one consistent choice before implementing authentication.
+- Hash passwords with bcrypt and use server-side sessions as selected in Phase 1; apply the documented cookie, CSRF, and role-authorization behavior consistently.
 - Validate and normalize input on the server even when the frontend also validates it. Use parameterized SQL queries.
 - Enforce data integrity in MySQL with appropriate primary/foreign keys, `NOT NULL`, `UNIQUE`, `CHECK`, and `DEFAULT` constraints.
 - Keep database access, request handling, and presentation responsibilities separated.
@@ -30,8 +31,8 @@ This repository is for the **Blood Bank and Donor Network**, a college DBMS Labo
 
 - Represent donation, inventory, hospital request, allocation, and expiry as traceable records with explicit statuses and timestamps where appropriate.
 - Apply donor eligibility and blood compatibility rules consistently in the backend and database operations where practical; document the authoritative rule set before implementation.
-- Treat expiry handling as a scheduled database or application process with an auditable outcome; choose the mechanism during database design.
-- Provide reproducible SQL DDL and DML, including at least ten sample records in each agreed major table, when the database phase is authorized.
+- Use the approved daily MySQL Event Scheduler expiry design, subject to confirming target-server support during Phase 3.
+- In Phase 3, prepare reproducible SQL DDL/DML and at least ten sample rows for every major table listed in `docs/database-design.md`, after explicit authorization.
 - Demonstrate the required relational concepts and operations listed in the scope, including a view and a stored procedure or function, at least one trigger, and expiry handling.
 
 ## Verification and documentation
