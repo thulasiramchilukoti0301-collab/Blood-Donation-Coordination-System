@@ -2,7 +2,7 @@
 
 ## Project
 
-**Blood Bank and Donor Network** is a college DBMS Laboratory group mini-project. The intended deliverable is a working web application backed by MySQL.
+**Blood Donation Coordination System** is a college DBMS Laboratory group mini-project. The intended deliverable is a working web application backed by MySQL.
 
 ## Technology
 

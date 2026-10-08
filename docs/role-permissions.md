@@ -5,6 +5,10 @@
 - Default deny: each endpoint requires authentication and an explicit role/ownership check.
 - A Hospital can see only its own profile and requests. A Donor can see only their own profile, bookings, and donation history. Admin / Blood Bank Staff can access operational records needed to run the bank.
 - Public registration never creates an Admin account. Admin provisioning is out-of-band/manual for this project.
+- Every protected request checks the current account status, role, and resource ownership; a session cookie alone does not preserve access after status changes.
+- PENDING Donor/Hospital accounts may authenticate only to view approval status, read/update permitted fields on their own profile, change their password, and log out. They cannot book, request blood, or perform other operational actions.
+- SUSPENDED accounts cannot establish a session. Suspension revokes existing sessions. Reactivation requires an audited staff action and a fresh login; a revoked session is never restored.
+- Password change is authenticated, verifies the current password, validates the new password server-side using the registration policy, stores only a bcrypt hash, audits without password material, and revokes all account sessions including the current one. CSRF protection applies; successful change requires a fresh login. Public password recovery is out of scope.
 - Delete means logical cancellation/deactivation where history matters. Completed donations, allocations, issued units, audit events, and requests are retained; no user can hard-delete traceable history through the application.
 
 ## Permission matrix
@@ -12,8 +16,10 @@
 | Resource/action | Admin / Blood Bank Staff | Hospital | Donor |
 |---|---|---|---|
 | Register account | Create/approve/suspend all non-admin profiles; Admin account provisioning outside public flow | Create own pending account | Create own pending account |
-| Login/logout | Own account | Own account | Own account |
-| Profile | View/update all operational profiles; approve/suspend account | View/update own hospital contact/profile | View/update own donor profile |
+| Login/logout | Active Admin; manual/out-of-band provisioning | Own account; PENDING may authenticate only for the limited operations above | Own account; PENDING may authenticate only for the limited operations above |
+| Account status | Approve/suspend/reactivate non-admin accounts; every action audited | View own approval/status through current-account/profile screens | View own approval/status through current-account/profile screens |
+| Profile | View/update all operational profiles; approve/suspend/reactivate account | View/update permitted own hospital contact/profile fields while PENDING or ACTIVE | View/update permitted own donor profile fields while PENDING or ACTIVE |
+| Password | Change own password; no password material in responses/logs | Change own password while PENDING or ACTIVE | Change own password while PENDING or ACTIVE |
 | Donor eligibility | View history; record staff day-of acceptance/deferral and deferral date/reason category | None | View own advisory eligibility and next eligible date; no ability to mark accepted |
 | Donation history | View/search all; create/correct donation record with audited reason | None | View own records, read-only |
 | Donation slots | Create/manage slot availability; view all; cancel with reason; check in/no-show | None | View open slots; book/cancel own booking under cutoff; view own booking status |
@@ -26,7 +32,9 @@
 
 ## Admin-only operations
 
-Only Admin / Blood Bank Staff may: approve/suspend accounts; confirm blood group for operational use; make final day-of donor acceptance/deferral; record and correct completed donations; approve/reject testing; create, discard, expire, allocate, deallocate, or issue blood units; review/reject hospital requests; change request priority/status on behalf of workflow; edit blood-group/compatibility reference data; access audit logs and system-wide reports. Any correction or override requires reason and audit event.
+Only an ACTIVE Admin / Blood Bank Staff account may: approve/suspend/reactivate accounts; confirm blood group for operational use; make final day-of donor acceptance/deferral; record and correct completed donations; approve/reject testing; create, discard, expire, allocate, deallocate, or issue blood units; review/reject hospital requests; change request priority/status on behalf of workflow; edit blood-group/compatibility reference data; access audit logs and system-wide reports. Any correction, override, account-state change, or reactivation requires reason and audit event. Reactivation invalidates old sessions; the account must log in again.
+
+Hospital and Donor operational permissions in the matrix require `ACTIVE` account status. Pending users are limited to approval/status view, permitted own-profile read/update, password change, and logout. Suspended users cannot log in and have no valid protected requests; middleware/service logic checks current status on every request.
 
 Hospitals cannot allocate units, view unit-level donor provenance, change staff decisions, or see other hospitals' requests. Donors cannot self-approve, record donations, alter eligibility outcome, or see other donors. User-supplied identifiers are never trusted in place of authenticated ownership.
 
