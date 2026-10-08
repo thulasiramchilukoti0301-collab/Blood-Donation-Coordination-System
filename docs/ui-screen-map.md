@@ -13,7 +13,7 @@ This is a planning document. Every screen and route below is proposed; screens r
 | 5. Donor Profile | Donor | Proposed: `/donor/profile` | View and update the donor's own permitted profile details. | Account, Donor, BloodGroup  | Thulasi | GET/PATCH /api/donors/me | OPEN |
 | 6. Eligibility Status | Donor | Proposed: `/donor/eligibility` | Show advisory eligibility information and the latest recorded decision; explain when staff review is required. | Donor, EligibilityDecision, Booking, Donation  | Thulasi | GET /api/donors/me/eligibility | OPEN |
 | 7. Available Donation Slots | Donor | Proposed: `/donor/slots` | Browse open slots and begin a booking for an available slot. | DonationSlot, Booking  | Thulasi | GET /api/donation-slots; POST /api/donors/me/bookings | OPEN |
-| 8. My Bookings | Donor | Proposed: `/donor/bookings` | Review upcoming and past bookings and cancel an eligible booking. | Booking, DonationSlot, EligibilityDecision  | Thulasi | GET /api/donors/me/bookings; POST /api/donors/me/bookings/{bookingId}/cancellation | OPEN |
+| 8. My Bookings | Donor | Proposed: `/donor/bookings` | Review upcoming and past bookings and cancel an eligible booking; explain that a cancelled booking cannot be recreated for the same slot under the schema's unique key. | Booking, DonationSlot, EligibilityDecision  | Thulasi | GET /api/donors/me/bookings; POST /api/donors/me/bookings/{bookingId}/cancellation | OPEN |
 | 9. Donation History | Donor | Proposed: `/donor/donations` | Review the donor's high-level donation history and outcomes. | Donor, Booking, Donation  | Thulasi | GET /api/donors/me/donations | OPEN |
 | 10. Hospital Dashboard | Hospital | Proposed: `/hospital` | Show the hospital's request summaries and links to create or review requests. | Hospital, HospitalRequest, Allocation  | Lathikaa | GET /api/hospitals/me/reports/requests; GET /api/hospitals/me/requests | OPEN |
 | 11. Hospital Profile | Hospital | Proposed: `/hospital/profile` | View and update the hospital's own permitted profile/contact details. | Account, Hospital  | Lathikaa | GET/PATCH /api/hospitals/me | OPEN |
@@ -38,6 +38,8 @@ This is a planning document. Every screen and route below is proposed; screens r
 | 30. Account / Password Settings | Donor, Hospital, Admin / Blood Bank Staff | Proposed: `/account/settings` | Review account settings and change the account password through the authenticated account workflow. | Account  | Thulasi | GET /api/auth/me; POST /api/auth/password; POST /api/auth/logout | OPEN |
 
 Registration entry points belong to Login. Account approval/suspension queues belong to Donor Management and Hospital Management. These supporting flows do not add screens to the 30-screen baseline. Screens may be routes, tabs, drawers, or detail panels.
+
+Ownership exception: Thulasi owns the Donor Dashboard and its own activity endpoint within the donor feature. Lathikaa owns the Hospital and Admin dashboards and cross-domain reports, as recorded in `team-workflow.md`.
 
 ## Shared UI requirements
 

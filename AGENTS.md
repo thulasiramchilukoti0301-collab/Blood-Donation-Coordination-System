@@ -8,6 +8,7 @@ This repository is for the **Blood Donation Coordination System**, a college DBM
 
 - Work only on the phase the user explicitly authorizes. Planning documents do not authorize implementation.
 - Phase 2 database design is complete. Phase 3 database implementation is the next phase and may begin only after the user explicitly approves it.
+- The initial backend/frontend/database folder scaffold has been integrated into `main`, but its tracked SQL/runtime files are empty placeholders. This repository setup is not Phase 3 or Phase 4 implementation evidence.
 - Do not create application code, database tables, migrations, or sample data until implementation is explicitly requested.
 - Do not create executable SQL, install dependencies, alter Git configuration, or commit/push unless explicitly requested.
 - Keep the application within the agreed scope in `docs/project-scope.md`; ask before adding features that change it materially.
