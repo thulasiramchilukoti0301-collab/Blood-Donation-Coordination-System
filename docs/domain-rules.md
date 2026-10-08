@@ -25,10 +25,11 @@ Canonical API/database state and decision codes are uppercase. Human-readable la
 
 - Staff defines each slot's start/end and positive capacity in Asia/Kolkata local time; slot duration is not fixed by the system. Capacity occupancy counts `BOOKED` reservations and `CHECKED_IN` bookings. `CANCELLED_BY_DONOR`, `CANCELLED_BY_STAFF`, `NO_SHOW`, and `COMPLETED` do not occupy capacity. Capacity may be raised freely, but a reduction below the current occupied count is rejected.
 - Reject edits to a slot's schedule once any booking row exists for it. The approved DonationSlot schema and slot API do not define a location field, so location persistence/editing is not currently part of the design. Cancelling a future slot follows the existing cancellation rule: cancel its still-`BOOKED` bookings with staff reason/audit; a checked-in donor must be resolved as a donation outcome rather than silently cancelled.
-- A donor can book an open future slot only if account status is `ACTIVE`, eligibility interval passes, and they have no other active booking for the same appointment window. For this capacity/overlap rule, active bookings are `BOOKED` and `CHECKED_IN`.
+- A donor can book an open future slot only if account status is `ACTIVE`, the eligibility check passes, and they have no other active booking for the same appointment window. For this capacity/overlap rule, active bookings are `BOOKED` and `CHECKED_IN`. The 56-day interval and latest staff deferral both affect eligibility, but the booking evaluation date and `REVIEW_REQUIRED` blocking behavior remain open; see `implementation-readiness.md`.
+- Schema key `(donor_account_id, slot_id)` prevents booking the same slot again even after a previous booking is cancelled. The API/UI should present that explicit schema consequence and report a safe conflict on a duplicate attempt.
 - Booking statuses: `BOOKED`, `CANCELLED_BY_DONOR`, `CANCELLED_BY_STAFF`, `CHECKED_IN`, `NO_SHOW`, `COMPLETED`.
 - Donor cancellation is permitted until the slot start time; after that, only staff can resolve the booking as `NO_SHOW` or correct it with an audited action. Staff can cancel before attendance.
-- `BOOKED -> CANCELLED_BY_DONOR` or `CANCELLED_BY_STAFF`; `BOOKED -> CHECKED_IN -> COMPLETED`; `BOOKED -> NO_SHOW`. `CHECKED_IN` can only become `COMPLETED` after a donation record is opened, or be resolved by staff as a no-donation attendance outcome. Cancellation/no-show does not create a donation or unit.
+- `BOOKED -> CANCELLED_BY_DONOR` or `CANCELLED_BY_STAFF`; `BOOKED -> CHECKED_IN -> COMPLETED`; `BOOKED -> NO_SHOW`. `CHECKED_IN` can become `COMPLETED` after a donation record is opened. A checked-in visit with no collected unit has no separate Booking status; whether it must create a `Donation` with outcome `DEFERRED` or can be resolved without a Donation row remains open in `implementation-readiness.md`. Cancellation/no-show does not create a donation or unit.
 - Keep cancelled/no-show bookings as history; do not delete them.
 
 The schema booking statuses and capacity treatment are: `BOOKED` (occupies capacity), `CHECKED_IN` (occupies capacity), `CANCELLED_BY_DONOR` (does not), `CANCELLED_BY_STAFF` (does not), `NO_SHOW` (does not), and `COMPLETED` (does not). These names match `database-design.md` and `relational-schema.md`.
@@ -89,10 +90,12 @@ Hospital, requested ABO/Rh group, positive integer `quantityRequested`, priority
 
 - `SUBMITTED -> UNDER_REVIEW -> PARTIALLY_FULFILLED -> FULFILLED`
 - `UNDER_REVIEW -> AWAITING_INVENTORY -> PARTIALLY_FULFILLED` when compatible stock becomes available
-- `SUBMITTED`, `UNDER_REVIEW`, `AWAITING_INVENTORY`, or `PARTIALLY_FULFILLED -> CANCELLED` (hospital may cancel before any unit is issued; staff may cancel with reason). In the same transaction, cancel unissued active allocations and return their units to `AVAILABLE` if still usable/unexpired, otherwise `EXPIRED`.
+- `SUBMITTED`, `UNDER_REVIEW`, `AWAITING_INVENTORY`, or `PARTIALLY_FULFILLED -> CANCELLED` are status transitions in the domain model. The approved Hospital cancellation contract permits cancellation only before any unit is issued. Whether staff may cancel a request after partial issue is OPEN; no Admin cancellation API contract is approved.
 - `PARTIALLY_FULFILLED -> AWAITING_INVENTORY` only when no units remain either allocated or issued (for example, all reservations are cancelled/expired before any issue)
 - `UNDER_REVIEW -> REJECTED` by staff with reason; rejected is terminal
 - `FULFILLED`, `CANCELLED`, `REJECTED` are terminal
+
+Hospital cancellation is allowed only before any unit has been issued. Staff cancellation after partial issue remains OPEN, including whether staff has that permission and its transition/audit contract. If that permission is approved, a proposed preservation rule is to retain issued Allocation rows/units and cancel/release only unissued allocations, returning units only when still usable and unexpired. Request quantity stays immutable after submission.
 
 | Derived request state | Current Allocation quantities | Result |
 |---|---|---|
@@ -105,7 +108,7 @@ Hospital, requested ABO/Rh group, positive integer `quantityRequested`, priority
 | `SUBMITTED` | `UNDER_REVIEW`, `CANCELLED` |
 | `UNDER_REVIEW` | `AWAITING_INVENTORY`, `PARTIALLY_FULFILLED`, `REJECTED`, `CANCELLED` |
 | `AWAITING_INVENTORY` | `PARTIALLY_FULFILLED`, `CANCELLED` |
-| `PARTIALLY_FULFILLED` | `FULFILLED`, `CANCELLED`; `AWAITING_INVENTORY` only when both current allocated and issued counts are zero |
+| `PARTIALLY_FULFILLED` | `FULFILLED`; `CANCELLED` subject to cancellation permission/timing (staff cancellation after partial issue is OPEN); `AWAITING_INVENTORY` only when both current allocated and issued counts are zero |
 | `FULFILLED`, `CANCELLED`, `REJECTED` | Terminal; no transitions |
 
 `ALLOCATED` means reserved/committed, not issued. `FULFILLED` requires exactly the requested quantity to be `ISSUED`. On an allocation attempt with zero additional eligible units, derive status using all current allocation rows: choose `AWAITING_INVENTORY` only when current allocated and issued quantities are both zero; retain `PARTIALLY_FULFILLED` when allocated/issued units remain and issued quantity is below requested; retain `FULFILLED` when issued quantity equals the request. Never allocate more than `quantityRequested - current ALLOCATED - current ISSUED`. `FULFILLED`, `CANCELLED`, and `REJECTED` are terminal and must never be reopened or regressed by allocation or expiry processing.
@@ -145,6 +148,6 @@ Represent compatibility relationally in `BloodGroup` and `BloodCompatibility`, w
 
 ## 7. Audit events
 
-Audit at least: account approval/suspension and role changes; donor profile corrections by staff; eligibility/deferral decisions; booking create/cancel/no-show correction; donation recording and testing/release decisions; unit creation, discard, expiry, allocation, deallocation, and issue; blood-group/compatibility reference changes; hospital request create, priority/status/quantity changes, rejection/cancellation; authentication failures only as counts/actor/time if desired (never credentials).
+Audit at least: account approval/suspension/reactivation; donor profile corrections by staff; eligibility/deferral decisions; booking create/cancel/no-show correction; donation recording and testing/release decisions; unit creation, discard, expiry, allocation, deallocation, and issue; blood-group/compatibility reference changes; hospital request create, priority/status, rejection/cancellation; authentication failures only as counts/actor/time if desired (never credentials). Request quantity is immutable after submission. Role changes are not an approved application operation; if a role-changing workflow is later approved, specify and audit it separately.
 
 Each event should capture actor, action, entity type/id, timestamp, and concise before/after state or safe change summary; include reason where a staff override is permitted. Never store passwords, password hashes in audit payload, JWT/session tokens, secrets, detailed medical answers, or unnecessary sensitive information.

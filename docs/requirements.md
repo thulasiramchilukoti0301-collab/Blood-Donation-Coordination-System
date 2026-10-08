@@ -21,6 +21,8 @@ This document turns the approved project scope into requirements for the college
 | R-11 | Produce SQL and academic artifacts that demonstrate all database requirements in `project-scope.md`. |
 | R-12 | Provide test evidence and complete setup, use, and database documentation before handoff. |
 
+The source-separated academic handoff checklist, including user-requested PPT and GitHub URL deliverables, is in [`project-report-checklist.md`](project-report-checklist.md), which records the recovered exact order of the thirteen college report sections.
+
 ## Operational assumptions
 
 - The first version models whole-blood donations and red-cell compatibility for allocation. It does not model components, crossmatching, transfusion decisions, or clinical workflows.

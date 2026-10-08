@@ -76,4 +76,6 @@ The major-table list and scheduled expiry design are documented in `docs/databas
 
 ## Acceptance outline
 
+Source-separated academic handoff requirements and user-requested PPT/GitHub deliverables are tracked in [`docs/project-report-checklist.md`](project-report-checklist.md), including the recovered college section order.
+
 The project is complete when the authorized implementation phases produce a usable React/Express/MySQL application that supports the functional scope, enforces role and data integrity rules, demonstrates the listed DBMS concepts, includes the academic and user documentation, and has documented test results.

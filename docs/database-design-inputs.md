@@ -26,9 +26,17 @@ Phase 1 candidate entities and open questions have been resolved into the Phase 
 
 ## Remaining environment decisions
 
-- Select and document the actual MySQL server version; design assumes MySQL 8.0.16+ for enforced CHECK constraints and generated-column/index behavior.
-- Verify the target MySQL environment permits enabling the Event Scheduler and grants the project user appropriate event privileges. If unavailable, use the documented single application-scheduler fallback.
+- The user reported MySQL Workbench observations on 2026-10-08: connected server `8.0.46`, Event Scheduler `ON`, global/session time zones `SYSTEM`, and system time zone `India Standard Time`. This version satisfies the design's minimum of MySQL 8.0.16 for enforced CHECK constraints, but named `Asia/Kolkata` time-zone support and event creation privileges remain to be checked in the actual target setup.
+- These observations describe one local environment and do not establish Lathikaa's MySQL version, time-zone tables, Event Scheduler configuration, or privileges. Compare and document both developers' local environments before relying on the scheduled expiry path; retain the single documented application-scheduler fallback if the target cannot support the event.
 - Choose session-store implementation and local frontend/API CSRF/CORS configuration during application foundation; neither changes domain relations.
 - Confirm exact DDL details for generated unique active-allocation key, connection-scoped trigger actor context, and routine/event transaction behavior against the selected MySQL release.
+
+### User-provided connection evidence
+
+- **2026-10-08, MySQL Workbench:** connected server version `8.0.46`; Event Scheduler `ON`; global and session time zones `SYSTEM`; system time zone `India Standard Time`. These were reported by the user and were not queried by this documentation task.
+- **Historical interactive MySQL CLI (observation date unavailable in the recovered excerpt):** the user provided `SELECT VERSION()` = `8.0.46`; `SHOW VARIABLES LIKE 'event_scheduler'` = `ON`; and `SELECT @@sql_mode` = `ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION`. This is user-provided historical output, not queried by this task; do not infer an observation date or treat it as evidence for another developer's environment.
+- **Earlier non-interactive CLI attempt:** the readiness review records an access-denied result for its default local account; no credential was requested or displayed. That failed attempt does not contradict the separately reported interactive Workbench/CLI observations.
+
+No item above proves that schema migrations, event definitions, or application code have been run. Named time-zone support, event-creation privileges, and the other developer's environment remain open.
 
 These are environment/implementation checks, not unresolved domain modeling choices. The physical schema and SQL syntax remain to be authored in the later database implementation phase.

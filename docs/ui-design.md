@@ -81,3 +81,39 @@ This document records three available visual theme options for the Blood Donatio
 - Status and emergency meaning must never rely on color alone.
 - Do not invent finalized inventory thresholds or dashboard metrics.
 - Business rules override illustrative UI: allocation and issuing are separate actions; label allocated/reserved and issued quantities separately; `FULFILLED` requires all requested units to be issued; workflow tracks must reflect actual branches and cancellations rather than imply every request follows one linear sequence.
+
+## Additional status and priority reference
+
+These colors and treatments are source design references. They do not assign a theme to any screen, define operational thresholds, or replace the canonical status text. Preserve readable semantic foreground/tint combinations, and always include a text label or other non-color cue.
+
+| Meaning | Mint Gauge | Sky Pipeline | Rose Quartz Focus |
+|---|---|---|---|
+| Emergency priority | `#E5636D` | `#E5636D` | `#C0485A` |
+| Urgent priority | `#F2B84B` | `#F2B84B` | `#F2B84B` |
+| Normal priority | `#5FBFA8` | `#3B8BEB` | `#8DBFA8` |
+| Unit `AVAILABLE` | `#2FA58A` | `#3B8BEB` | `#E66A82` |
+| Unit `ALLOCATED` | `#7C93E8` | `#F7C948` | `#F2B84B` |
+| Unit `ISSUED` | `#5E8F83` | `#3FB68B` | `#3F7F5E` |
+| Unit `EXPIRED` | `#E5636D` | `#E5636D` | `#C0485A` |
+| Unit `DISCARDED` | `#B7C4BF` | `#B7C6DA` | `#CDBBC0` |
+| Request `SUBMITTED` | `#8FA89F` | `#A9C4E6` | `#CDBBC0` |
+| Request `UNDER_REVIEW` | `#7C93E8` | `#3B8BEB` | `#E66A82` |
+| Request `AWAITING_INVENTORY` | `#F2B84B` | `#F7C948` | `#F2B84B` |
+| Request `PARTIALLY_FULFILLED` | `#5FBFA8`, half-filled chip | `#3FB68B`, half-filled | `#8DBFA8`, half-filled |
+| Request `FULFILLED` | `#2FA58A` | `#3FB68B` | `#3F7F5E` |
+| Request `REJECTED` | `#E5636D` | `#E5636D` | `#C0485A` |
+| Request `CANCELLED` | `#B7C4BF` | `#B7C6DA` | `#CDBBC0` |
+
+## Typography and interaction reference
+
+Values below are illustrative specifications for a selected theme, not page assignments. Apply reduced-motion preferences to every animation and verify foreground contrast independently of the status color.
+
+| Theme | Type sizes and font details | Interaction and chart details |
+|---|---|---|
+| Mint Gauge | Page title 28–30 px; section title 20 px; card title 16 px; gauge numbers 20–24 px; body 13–14 px; captions 12 px. Sora number figures are tabular. | Ring first-load animation 600 ms ease-out; card hover lift 2 px; drawer 200 ms; status crossfade and quantity-ring fill. Rounded chart bars with `borderRadius` 8, faint y-grid, donut cutout 78%. Use strong button/link `#1E8A71` for small white text rather than relying on `#2FA58A`. |
+| Sky Pipeline | Page title 28 px; stage numbers 40 px; card title 16 px; body 13–14 px; captions 12 px. | Count-up stage numbers; one chevron pulse when a count changes; track marker transition 250 ms; slight dock-icon hover lift; confirmation check. Rounded chart bars and faint blue grids; yellow tint is reserved for attention. Use strong button/link `#2F78D6`. |
+| Rose Quartz Focus | Page title 42 px; key card numbers 52 px; brand 20 px; body 13–14 px; captions 12 px. Use `#7E656D` for small muted text; `#A58A92` is decorative/muted. | Cards fade/rise 8 px with 60 ms stagger; gentle hover with darker border; tooltip fade; chip crossfade; sage confirmation feedback. Rounded charts, light grids, serif chart titles, cream-center donuts. Emergency uses `#C0485A` plus a label, distinct from rose actions. |
+
+Mint top pill tabs, Sky floating bottom dock, and Rose right icon rail are optional examples from the source reference, not three navigation prescriptions. Keep the same shared navigation placement and behavior across every theme. The final common navigation layout remains undecided.
+
+Before each later screen/page design or implementation task, recommend a theme suited to that page's purpose and let the user choose. Apply the user's choice to that page. Until the user makes that choice, its assignment remains OPEN; every cell in `ui-screen-map.md` is currently OPEN.

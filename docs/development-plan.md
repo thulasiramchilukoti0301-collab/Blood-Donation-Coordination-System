@@ -4,6 +4,8 @@ This plan divides the project into reviewable phases. Phases 0, 1, and 2 are com
 
 The approved architecture remains React, Node.js/Express, MySQL, `mysql2`, bcrypt, server-side sessions, and Chart.js. See `team-workflow.md` for full-feature ownership. Shared foundations are integrated sequentially; domain feature work can proceed in parallel after dependencies are available on `main`.
 
+The one-time repository scaffold commit (`88fd043`, `chore: initialize project structure`) is present in `main` ancestry through merge commit `3335268`. It consists of tracked folder/file placeholders only; the current `backend`, `frontend`, and `database` runtime/SQL files are empty. This does not count as Phase 3 database implementation or the runnable Phase 4 application foundation. The feature implementation phases remain unstarted and require their existing explicit authorization gates.
+
 ## Phase 0 — Scope and project conventions (complete)
 
 - Inspect repository state.
@@ -39,7 +41,7 @@ The approved architecture remains React, Node.js/Express, MySQL, `mysql2`, bcryp
 
 ## Phase 4 — Project foundation and connectivity
 
-- Establish the React and Express project structure and development configuration.
+- Turn the existing empty React/Express scaffold placeholders into a runnable project structure and development configuration; do not count the one-time folder scaffold as this deliverable.
 - Configure environment-based settings and MySQL connection pooling with `mysql2`.
 - Add a minimal connectivity path and consistent error handling.
 - **Deliverables:** runnable client/server foundation and documented local setup.

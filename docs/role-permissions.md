@@ -13,6 +13,10 @@
 
 ## Permission matrix
 
+The existing permission statements for staff-created non-admin accounts and corrections to completed Donation records do not yet have API contracts. They remain policy/contract decisions to resolve as listed in `implementation-readiness.md`; this matrix does not authorize an undocumented endpoint or implementation.
+
+The broad Admin request-status permission does not resolve whether staff may cancel a request after partial issue. That permission and its operation contract remain OPEN; Hospital cancellation remains limited to before any unit is issued.
+
 | Resource/action | Admin / Blood Bank Staff | Hospital | Donor |
 |---|---|---|---|
 | Register account | Create/approve/suspend all non-admin profiles; Admin account provisioning outside public flow | Create own pending account | Create own pending account |

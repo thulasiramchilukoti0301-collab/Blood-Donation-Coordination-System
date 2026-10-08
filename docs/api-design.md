@@ -30,7 +30,7 @@ This is a planned API contract, not an implementation. Endpoints use JSON over H
 | `/api/admin/donation-slots` | POST | Admin | Create slot | startsAt, endsAt, capacity | slotId, slotStatus, startsAt, endsAt, capacity |
 | `/api/admin/donation-slots/{slotId}` | PATCH | Active Admin | Change future slot capacity or cancel; reject capacity below occupancy and reject schedule edits once any booking exists | capacity, slotStatus, reason; startsAt/endsAt only when no bookings exist | slotId, slotStatus, startsAt, endsAt, capacity |
 | `/api/donors/me/bookings` | GET | Donor | List own bookings | bookingStatus, from, to, page | bookings |
-| `/api/donors/me/bookings` | POST | Donor | Book an open slot | slotId | bookingId, bookingStatus, slot summary |
+| `/api/donors/me/bookings` | POST | ACTIVE Donor | Book an open slot after the eligibility predicate and evaluation date are resolved; duplicate booking for the same donor/slot, even after cancellation, conflicts with the schema unique key | slotId | bookingId, bookingStatus, slot summary |
 | `/api/donors/me/bookings/{bookingId}/cancellation` | POST | Donor | Cancel own booking before start | reasonCode optional | bookingId, bookingStatus, cancelledAt |
 | `/api/admin/bookings` | GET | Admin | Search bookings/check-in queue | donor, bookingStatus, from, to, page | bookings |
 | `/api/admin/bookings/{bookingId}/status` | PATCH | Admin | Check in, mark no-show, staff-cancel | bookingStatus, reason | booking |
@@ -62,12 +62,12 @@ This is a planned API contract, not an implementation. Endpoints use JSON over H
 | `/api/hospitals/me/requests` | POST | Hospital | Submit blood request | recipientGroupId, quantityRequested, priority, neededBy, note | requestId, requestStatus, outstandingQuantity |
 | `/api/hospitals/me/requests` | GET | Hospital | List own requests | requestStatus, priority, recipientGroupId, submittedFrom/To, neededByFrom/To, page | requests and fulfillment totals |
 | `/api/hospitals/me/requests/{requestId}` | GET | Hospital | View only own request status/detail | none | request fields safe for that Hospital, allocated/issued/outstanding counts, requestStatusHistory; no donor identity, unit provenance, or staff-only notes |
-| `/api/hospitals/me/requests/{requestId}/cancellation` | POST | Hospital | Cancel own request before issue | reasonCode, note | requestStatus, cancelledAt |
+| `/api/hospitals/me/requests/{requestId}/cancellation` | POST | ACTIVE Hospital | Cancel own request only before any unit has been issued; release/cancel unissued allocations transactionally | reasonCode, note | requestStatus, cancelledAt, issued/remaining totals |
 | `/api/admin/requests` | GET | Admin | Work queue/search all requests | requestStatus, priority, recipientGroupId, hospitalId, submittedFrom/To, neededByFrom/To, page | requests sorted priority/neededBy/createdAt |
 | `/api/admin/requests/{requestId}` | GET | Active Admin | **Approved addition.** Read request details and its allocation history | none | request/status history, requested/allocated/issued/outstanding counts, allocations with unit ID/status/group/expiry, hospital summary and safe request note; no donor identity or staff-only notes |
 | `/api/admin/requests/{requestId}/review` | POST | Active Admin | Begin review / set awaiting inventory / reject when the documented transition and allocation-derived state permit it | decision (`UNDER_REVIEW`, `AWAITING_INVENTORY`, `REJECTED`), reasonCode, safeNote | requestStatus, requestStatusHistory |
 | `/api/admin/requests/{requestId}/priority` | PATCH | Admin | Change priority with reason | priority (`EMERGENCY`, `URGENT`, `NORMAL`), reason | requestId, priority |
-| `/api/admin/requests/{requestId}/allocations` | POST | Active Admin | Allocate compatible available units only for a nonterminal request | quantity (optional; defaults to outstanding derived as requested minus current ALLOCATED and ISSUED), intendedIssueDate | allocations array (one allocationId and bloodUnitId per unit), separately labeled allocated/issued/outstanding totals, requestStatus; never over-allocate or reopen a terminal state |
+| `/api/admin/requests/{requestId}/allocations` | POST | Active Admin | Allocate compatible available units only when request is `UNDER_REVIEW`, `AWAITING_INVENTORY`, or `PARTIALLY_FULFILLED`; `SUBMITTED` must first enter review, and terminal requests cannot be allocated | quantity (optional; defaults to outstanding derived as requested minus current ALLOCATED and ISSUED), intendedIssueDate | allocations array (one allocationId and bloodUnitId per unit), separately labeled allocated/issued/outstanding totals, requestStatus; never over-allocate or reopen a terminal state |
 | `/api/admin/allocations/{allocationId}/cancellation` | POST | Admin | Release allocation before issue | reason | allocationStatus, unitStatus |
 | `/api/admin/allocations/{allocationId}/issue` | POST | Admin | Record handoff/issue | issuedAt, handoffReference | allocationStatus, unitStatus, requestStatus |
 
@@ -81,6 +81,8 @@ This is a planned API contract, not an implementation. Endpoints use JSON over H
 | `/api/admin/reports/requests` | GET | Admin | Request/fulfillment aggregates | from, to, priority, recipientGroupId, requestStatus | request count, requested/allocated/issued sums, grouped results, avg fulfillment duration |
 | `/api/hospitals/me/reports/requests` | GET | Hospital | Own request summary | from, to | own counts and requested/issued totals by requestStatus/priority |
 | `/api/donors/me/reports/activity` | GET | Donor | Own booking/donation summary | from, to | own booking and donation counts by bookingStatus/outcome and period |
+
+The `GET /api/blood-groups` response is authenticated, but the exact role/account-state scope and whether each role receives the full directed matrix or only necessary choices remain open. See `implementation-readiness.md`; do not use this generic contract to expose operational lookup data to PENDING accounts or broader groups than the permissions allow.
 
 All errors should return a consistent safe error code/message and optional field validation errors. Do not expose SQL, stack traces, password state, session identifiers, secrets, donor identity to hospitals, staff-only notes, or another user's records. Expected domain errors include validation failure, invalid current password, unauthenticated, forbidden, suspended account/session, not found, invalid transition, slot full/capacity conflict, ineligible pending staff review, insufficient stock, and conflict/stale allocation.
 
@@ -101,3 +103,11 @@ Password change at `POST /api/auth/password` requires the current password and s
 - Common safe errors include validation failure, unauthenticated, forbidden, not found, invalid transition, conflict, and rate limited. Responses must not expose SQL, stack traces, credentials, hashes, donor identity to Hospitals, or staff-only notes.
 
 The session-store choice is an implementation/configuration decision; a persistent store is preferable if deployment spans restarts, while a database-backed store should not be confused with the domain schema.
+
+### Open API contract gaps (no new routes approved here)
+
+Screen-to-endpoint mapping shows planned coverage only; it does not imply that every operation shown or implied by a screen has a complete approved contract.
+
+- The permissions document permits staff-created non-admin profiles and audited corrections to completed Donation records, but this API table has no corresponding creation or correction operation. Resolve the policy/contract mismatch before implementing either action.
+- The domain state table includes `PARTIALLY_FULFILLED -> CANCELLED`, but whether staff may cancel after partial issue is OPEN; no Admin request-cancellation operation is approved. If permission is approved, retaining issued allocations and releasing unissued allocations is a proposal only. Do not infer staff permission or a contract from the Hospital cancellation route.
+- Booking treatment of `REVIEW_REQUIRED`, the exact date used for the 56-day check, role-scoped blood-group lookup fields, timestamp ownership, and equal-time eligibility-decision ordering remain design questions listed in `implementation-readiness.md`.
