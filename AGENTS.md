@@ -2,7 +2,7 @@
 
 ## Project intent
 
-This repository is for the **Blood Bank and Donor Network**, a college DBMS Laboratory group mini-project. The target is a complete web application using React, Node.js with Express, MySQL, and `mysql2`.
+This repository is for the **Blood Donation Coordination System**, a college DBMS Laboratory group mini-project. The target is a complete web application using React, Node.js with Express, MySQL, and `mysql2`.
 
 ## Workflow boundaries
 

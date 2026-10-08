@@ -8,8 +8,9 @@ Canonical API/database state and decision codes are uppercase. Human-readable la
 
 1. Donor submits name, date of birth, contact details, address/area, ABO/Rh blood group (if known), and credentials. Server validates required fields and unique login identifiers.
 2. New donor account is `PENDING` until staff approves it. The donor may complete/edit their own profile; staff may correct/approve it. A donor cannot approve their own account or edit another donor.
-3. Staff confirmation/testing is authoritative for the blood group used for inventory. A donor-provided or self-reported group is not sufficient to establish an allocatable unit's group.
-4. Donation history is derived from donation records and visible to that donor and authorized staff. Donors cannot create or edit completed donation records.
+3. PENDING Donor/Hospital users may authenticate only to see approval status, access/update permitted own-profile fields, change their password, and log out. They cannot book or perform other operational actions. SUSPENDED accounts cannot establish sessions; suspension revokes existing sessions and every protected request checks current account state. Reactivation is an audited staff action and requires fresh login; revoked sessions remain invalid.
+4. Staff confirmation/testing is authoritative for the blood group used for inventory. A donor-provided or self-reported group is not sufficient to establish an allocatable unit's group.
+5. Donation history is derived from donation records and visible to that donor and authorized staff. Donors cannot create or edit completed donation records.
 
 ### Eligibility
 
@@ -22,20 +23,23 @@ Canonical API/database state and decision codes are uppercase. Human-readable la
 
 ### Booking and cancellation
 
-- Staff defines each slot's start/end and positive capacity in Asia/Kolkata local time; slot duration is not fixed by the system. Capacity may be raised freely, but cannot be lowered below its current active booking count. Cancelling a future slot cancels its still-`BOOKED` bookings with staff reason/audit; a checked-in donor must be resolved as a donation outcome rather than silently cancelled.
-- A donor can book an open future slot only if account is approved, eligibility interval passes, and they have no other active booking for the same appointment window.
+- Staff defines each slot's start/end and positive capacity in Asia/Kolkata local time; slot duration is not fixed by the system. Capacity occupancy counts `BOOKED` reservations and `CHECKED_IN` bookings. `CANCELLED_BY_DONOR`, `CANCELLED_BY_STAFF`, `NO_SHOW`, and `COMPLETED` do not occupy capacity. Capacity may be raised freely, but a reduction below the current occupied count is rejected.
+- Reject edits to a slot's schedule once any booking row exists for it. The approved DonationSlot schema and slot API do not define a location field, so location persistence/editing is not currently part of the design. Cancelling a future slot follows the existing cancellation rule: cancel its still-`BOOKED` bookings with staff reason/audit; a checked-in donor must be resolved as a donation outcome rather than silently cancelled.
+- A donor can book an open future slot only if account status is `ACTIVE`, eligibility interval passes, and they have no other active booking for the same appointment window. For this capacity/overlap rule, active bookings are `BOOKED` and `CHECKED_IN`.
 - Booking statuses: `BOOKED`, `CANCELLED_BY_DONOR`, `CANCELLED_BY_STAFF`, `CHECKED_IN`, `NO_SHOW`, `COMPLETED`.
 - Donor cancellation is permitted until the slot start time; after that, only staff can resolve the booking as `NO_SHOW` or correct it with an audited action. Staff can cancel before attendance.
 - `BOOKED -> CANCELLED_BY_DONOR` or `CANCELLED_BY_STAFF`; `BOOKED -> CHECKED_IN -> COMPLETED`; `BOOKED -> NO_SHOW`. `CHECKED_IN` can only become `COMPLETED` after a donation record is opened, or be resolved by staff as a no-donation attendance outcome. Cancellation/no-show does not create a donation or unit.
 - Keep cancelled/no-show bookings as history; do not delete them.
 
+The schema booking statuses and capacity treatment are: `BOOKED` (occupies capacity), `CHECKED_IN` (occupies capacity), `CANCELLED_BY_DONOR` (does not), `CANCELLED_BY_STAFF` (does not), `NO_SHOW` (does not), and `COMPLETED` (does not). These names match `database-design.md` and `relational-schema.md`.
+
 ## 2. Donation lifecycle
 
 1. Staff checks in the donor with a `CHECKED_IN` booking.
 2. Staff performs the day-of assessment and records an `ACCEPTED`, `TEMPORARILY_DEFERRED`, or `REVIEW_REQUIRED` EligibilityDecision. A booking being `BOOKED` or donor eligibility previewing `ELIGIBLE` is not proof of acceptance.
-3. Staff records a Donation outcome of `COLLECTED`, `INCOMPLETE`, or `DEFERRED`, with booking, time, and collection reference where applicable. A cancelled/no-show booking has no Donation row.
+3. Staff records a Donation outcome of `COLLECTED`, `INCOMPLETE`, or `DEFERRED`, with booking, time, and collection reference where applicable. Recording any outcome does not create a BloodUnit. A cancelled/no-show booking has no Donation row.
 4. Collected donations proceed to release review: `PENDING`, `APPROVED`, or `REJECTED` (`NOT_REQUIRED` for non-collected outcomes). Staff records decision timestamp and safe category/reason. Rejected or incomplete donations never create an allocatable unit.
-5. A unit is created only after a collected donation has `APPROVED` release and a confirmed blood group. Creation records source donation, group, collection date through the donation record, and expiry date; its persisted status starts as `AVAILABLE` if the expiry date is in the future, otherwise `EXPIRED`.
+5. Exactly one unit is created atomically only when a collected donation receives `APPROVED` release with a confirmed blood group. Repeating the same approval request is idempotent and cannot create a duplicate unit. Creation records source donation, group, collection date through the donation record, and expiry date; its persisted status starts as `AVAILABLE` if the expiry date is in the future, otherwise `EXPIRED`.
 6. One collected donation creates one unit for this project. This is a simplified mini-project assumption, not a model of component processing.
 
 ## 3. Blood-unit lifecycle
@@ -86,11 +90,27 @@ Hospital, requested ABO/Rh group, positive integer `quantityRequested`, priority
 - `SUBMITTED -> UNDER_REVIEW -> PARTIALLY_FULFILLED -> FULFILLED`
 - `UNDER_REVIEW -> AWAITING_INVENTORY -> PARTIALLY_FULFILLED` when compatible stock becomes available
 - `SUBMITTED`, `UNDER_REVIEW`, `AWAITING_INVENTORY`, or `PARTIALLY_FULFILLED -> CANCELLED` (hospital may cancel before any unit is issued; staff may cancel with reason). In the same transaction, cancel unissued active allocations and return their units to `AVAILABLE` if still usable/unexpired, otherwise `EXPIRED`.
-- `PARTIALLY_FULFILLED -> AWAITING_INVENTORY` if unissued allocations are cancelled and no units remain committed
+- `PARTIALLY_FULFILLED -> AWAITING_INVENTORY` only when no units remain either allocated or issued (for example, all reservations are cancelled/expired before any issue)
 - `UNDER_REVIEW -> REJECTED` by staff with reason; rejected is terminal
 - `FULFILLED`, `CANCELLED`, `REJECTED` are terminal
 
-Creation status is `SUBMITTED`. Staff review moves to `UNDER_REVIEW`; no suitable stock moves to `AWAITING_INVENTORY`. Any committed allocation moves the request to `PARTIALLY_FULFILLED` until all requested units are issued; this remains true even if all requested units are allocated but await handoff. `FULFILLED` means exactly that all requested units are `ISSUED`.
+| Derived request state | Current Allocation quantities | Result |
+|---|---|---|
+| Outstanding, no units reserved or issued | `ALLOCATED = 0`, `ISSUED = 0` | `AWAITING_INVENTORY` after review/allocation finds no stock |
+| Some units reserved and/or issued, but not all issued | `ALLOCATED + ISSUED > 0` and `ISSUED < quantityRequested` | `PARTIALLY_FULFILLED`; show allocated and issued quantities separately |
+| All requested units issued | `ISSUED = quantityRequested` | `FULFILLED` |
+
+| Current state | Allowed next states |
+|---|---|
+| `SUBMITTED` | `UNDER_REVIEW`, `CANCELLED` |
+| `UNDER_REVIEW` | `AWAITING_INVENTORY`, `PARTIALLY_FULFILLED`, `REJECTED`, `CANCELLED` |
+| `AWAITING_INVENTORY` | `PARTIALLY_FULFILLED`, `CANCELLED` |
+| `PARTIALLY_FULFILLED` | `FULFILLED`, `CANCELLED`; `AWAITING_INVENTORY` only when both current allocated and issued counts are zero |
+| `FULFILLED`, `CANCELLED`, `REJECTED` | Terminal; no transitions |
+
+`ALLOCATED` means reserved/committed, not issued. `FULFILLED` requires exactly the requested quantity to be `ISSUED`. On an allocation attempt with zero additional eligible units, derive status using all current allocation rows: choose `AWAITING_INVENTORY` only when current allocated and issued quantities are both zero; retain `PARTIALLY_FULFILLED` when allocated/issued units remain and issued quantity is below requested; retain `FULFILLED` when issued quantity equals the request. Never allocate more than `quantityRequested - current ALLOCATED - current ISSUED`. `FULFILLED`, `CANCELLED`, and `REJECTED` are terminal and must never be reopened or regressed by allocation or expiry processing.
+
+Creation status is `SUBMITTED`. Staff review moves to `UNDER_REVIEW`; no suitable stock moves to `AWAITING_INVENTORY`. Any current committed allocation with issued quantity below the request derives `PARTIALLY_FULFILLED`, including when all outstanding units are allocated but await handoff. If active allocations are cancelled or expire, recompute from the current `ALLOCATED` and `ISSUED` rows without changing a terminal request state.
 
 ## 5. Compatibility
 
@@ -116,9 +136,11 @@ Represent compatibility relationally in `BloodGroup` and `BloodCompatibility`, w
 - Allocation is Admin-only. A unit must have status `AVAILABLE`, be unexpired on intended issue date, have `APPROVED` release, and be compatible with requested recipient group.
 - Select units using FEFO: earliest expiry date first, then earliest collection date, then stable unit identifier for deterministic ties.
 - Request priority determines which request staff works first; it does not allow an incompatible unit or bypass unit eligibility.
-- Partial fulfillment is allowed. Allocate as many qualifying units as possible, record unit-to-request allocations individually, and derive remaining quantity as outstanding. If none are available, set request to `AWAITING_INVENTORY`; any committed allocations set it to `PARTIALLY_FULFILLED` until every requested unit is issued.
+- Partial fulfillment is allowed. Allocate qualifying units only up to `quantityRequested - current ALLOCATED - current ISSUED`, record unit-to-request allocations individually, and derive remaining quantity as outstanding. When no additional units are available, derive request status from the current `ALLOCATED` and `ISSUED` quantities using the request-state rules above; do not unconditionally change the request to `AWAITING_INVENTORY`.
 - If compatible inventory is insufficient, do not create phantom units, substitute an incompatible group, or silently reduce requested quantity. The hospital sees allocated/issued and outstanding counts.
 - Allocation is a single database transaction: lock/recheck candidate available units, use transaction-local reservation/row locks, set unit and allocation to `ALLOCATED`, update request status, write audit event, and commit. On any failure roll back all effects. Expire candidates at decision time before selecting.
+- Allocation capacity is `quantityRequested - current ALLOCATED quantity - current ISSUED quantity`; requests with terminal status cannot be allocated. A zero-additional-unit result derives the request status from all current allocations as specified above.
+- Allocation, issue, request/allocation cancellation, discard, and expiry must use one consistent locking strategy to prevent double assignment, issuing cancelled/expired units, over-allocation, and terminal-state regression. The exact strategy is to be implemented and verified with concurrent MySQL connections in Phase 3; it is not yet verified.
 - Cancelling an individual allocation before issue changes its allocation record to `CANCELLED` and returns the unit to `AVAILABLE` if it remains usable/unexpired, otherwise `EXPIRED`; audit the action.
 
 ## 7. Audit events

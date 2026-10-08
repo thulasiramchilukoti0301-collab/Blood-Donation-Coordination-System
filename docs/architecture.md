@@ -42,9 +42,11 @@ React client  -- HTTP/JSON -->  Express API  -- mysql2 -->  MySQL
 ## Security and integrity
 
 - Authentication uses bcrypt password hashes and server-side sessions with an opaque secure cookie, as selected in Phase 1. Never return or log passwords, password hashes, session identifiers, or secrets.
-- Use server-side role and ownership checks, CSRF protection for cookie-authenticated state changes, and secure cookie settings appropriate to the deployment.
+- Use server-side role, current account-status, and ownership checks on every protected request; CSRF protection applies to cookie-authenticated state changes, with secure cookie settings appropriate to the deployment. PENDING Donor/Hospital sessions are restricted to approval status, permitted own-profile reads/updates, password change, and logout. SUSPENDED accounts cannot log in; suspension revokes existing sessions, and reactivation requires an audited staff action and fresh login.
+- Password change verifies the current password, validates server-side using the registration password policy, stores only a bcrypt hash, audits without password material, revokes all account sessions including the current one, and requires a new login. The policy itself remains to be agreed because registration requirements are not yet documented.
 - Validate and normalize input on the server and use parameterized SQL.
 - Keep credentials outside source control; retain audit history without sensitive medical details.
+- Implement audit writes and request-status history alongside the first operations that require them; the audit-log screen can be implemented later.
 - Use relational constraints and transactions to protect identity, references, allocation exclusivity, and inventory transitions.
 
 ## Deferred implementation checks
