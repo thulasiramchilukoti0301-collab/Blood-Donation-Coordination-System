@@ -1,0 +1,23 @@
+{
+  "name": "blood-donation-coordination-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Express and MySQL connectivity foundation",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "test": "node --test",
+    "check:db": "node src/utils/checkDatabase.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.6",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "mysql2": "^3.24.5"
+  }
+}
