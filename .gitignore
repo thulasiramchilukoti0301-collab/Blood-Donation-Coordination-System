@@ -29,3 +29,17 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.bak
+*.temp
+*.swp
+.tmp/
+tmp/
+
+# Local database exports (keep reviewed migrations and seeds trackable)
+*.dump
+*.sql.gz
+*.sql.zip
+*.dump.sql
+*.backup.sql
+*.local.sql
+database/dumps/
+database/backups/
