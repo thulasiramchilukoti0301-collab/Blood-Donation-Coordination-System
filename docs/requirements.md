@@ -21,13 +21,17 @@ This document turns the approved project scope into requirements for the college
 | R-11 | Produce SQL and academic artifacts that demonstrate all database requirements in `project-scope.md`. |
 | R-12 | Provide test evidence and complete setup, use, and database documentation before handoff. |
 
+The source-separated academic handoff checklist, including user-requested PPT and GitHub URL deliverables, is in [`project-report-checklist.md`](project-report-checklist.md), which records the recovered exact order of the thirteen college report sections.
+
 ## Operational assumptions
 
 - The first version models whole-blood donations and red-cell compatibility for allocation. It does not model components, crossmatching, transfusion decisions, or clinical workflows.
-- A donation event is distinct from a usable inventory unit. A failed/incomplete donation or a donation whose required testing is not approved does not create an allocatable unit.
+- A donation outcome record never creates a BloodUnit. Approval of a collected donation with a confirmed group creates exactly one unit atomically and idempotently; a failed/incomplete or unapproved donation does not create an allocatable unit.
 - One unit represents one inventory item for this project. The actual collection volume is not used to compute clinical dosing.
 - Hospitals request a blood group and integer number of units. Allocation is recorded per unit so partial fulfillment can be represented.
 - Registration creates a pending account until approved by staff. Public self-registration cannot grant Admin privileges.
+- PENDING Donor/Hospital accounts may log in only to view approval status, read/update permitted own-profile fields, change their password, and log out; operational actions require ACTIVE. SUSPENDED accounts cannot establish sessions, existing sessions are revoked, and protected requests check current account state, role, and ownership. Reactivation is audited and requires a fresh login; revoked sessions remain invalid.
+- Password change verifies the current password, validates server-side using the same policy as registration, stores only a bcrypt hash, audits without password material, revokes all account sessions, and requires login again. CSRF protection remains required; public password recovery is excluded. The shared password policy is not yet specified.
 - No physical slot-capacity calendar, messaging, or external integrations are implied; a slot is a scheduled date/time record whose capacity rules can be kept simple for the mini-project.
 
 ## Functional requirement coverage

@@ -1,6 +1,10 @@
 # Development Plan
 
-This plan divides the project into reviewable phases. Phases 0, 1, and 2 are complete as documentation/design work. Do not begin a later phase without explicit user instruction.
+This plan divides the project into reviewable phases. Phases 0, 1, and 2 are complete as documentation/design work. No implementation phase is complete without repository evidence. Phases define authorized deliverables; feature ownership defines who implements those deliverables. Do not begin a later phase without explicit user instruction.
+
+The approved architecture remains React, Node.js/Express, MySQL, `mysql2`, bcrypt, server-side sessions, and Chart.js. See `team-workflow.md` for full-feature ownership. Shared foundations are integrated sequentially; domain feature work can proceed in parallel after dependencies are available on `main`.
+
+The one-time repository scaffold commit (`88fd043`, `chore: initialize project structure`) is present in `main` ancestry through merge commit `3335268`. It consists of tracked folder/file placeholders only; the current `backend`, `frontend`, and `database` runtime/SQL files are empty. This does not count as Phase 3 database implementation or the runnable Phase 4 application foundation. The feature implementation phases remain unstarted and require their existing explicit authorization gates.
 
 ## Phase 0 — Scope and project conventions (complete)
 
@@ -27,14 +31,17 @@ This plan divides the project into reviewable phases. Phases 0, 1, and 2 are com
 
 ## Phase 3 — Database implementation and local verification
 
+- Divide database work into coordinated feature modules aligned to `team-workflow.md` ownership; coordinate shared relations and invariants.
 - Create DDL and DML for the approved logical design; add at least ten sample records to every major table.
 - Implement and demonstrate the view, stored procedure, trigger, and scheduled expiry mechanism.
-- Verify keys, constraints, allocation concurrency invariants, and sample reports in the selected MySQL version.
+- Assemble and run database setup modules in dependency order, then verify keys, constraints, allocation concurrency invariants, and sample reports in the selected MySQL version.
+- Audit recording and RequestStatusHistory infrastructure must accompany the first operations that require those records; the audit-log screen may be implemented later.
 - **Deliverables:** reviewed SQL artifacts and local database verification evidence. Do not apply to a shared/live database without authorization.
+- Completing Phase 3 does not by itself authorize React or Express implementation; Phase 4 remains a separate authorization gate.
 
 ## Phase 4 — Project foundation and connectivity
 
-- Establish the React and Express project structure and development configuration.
+- Turn the existing empty React/Express scaffold placeholders into a runnable project structure and development configuration; do not count the one-time folder scaffold as this deliverable.
 - Configure environment-based settings and MySQL connection pooling with `mysql2`.
 - Add a minimal connectivity path and consistent error handling.
 - **Deliverables:** runnable client/server foundation and documented local setup.
@@ -76,3 +83,5 @@ This plan divides the project into reviewable phases. Phases 0, 1, and 2 are com
 - The user explicitly authorizes the next phase before work begins in it.
 - Review each phase's artifacts against the scope and architecture before advancing.
 - If a design choice would materially change scope, resolve it with the user before implementation.
+- Phase completion requires repository evidence for its deliverables; planned work is not evidence of implementation or verification.
+- Complete shared foundations sequentially and integrate them into `main`. Once the database, application foundation, and authentication dependencies are integrated, feature owners may develop independent domain modules in parallel, subject to each phase's authorization and cross-feature dependencies. Compatibility/allocation depends on the integrated inventory and request interfaces.

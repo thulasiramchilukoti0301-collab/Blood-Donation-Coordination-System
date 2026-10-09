@@ -1,0 +1,160 @@
+# Implementation Readiness Review
+
+This is a documentation-only review of the current design. It does not authorize implementation or amend approved business rules. API operations are planned contracts, including approved documentation additions, not implemented endpoints. Frontend routes/screens are proposed, and no behavior described here is claimed to be implemented or verified.
+
+## 1. Current project status
+
+| Area | Documented/designed | Implemented and verified |
+|---|---|---|
+| Scope, architecture, requirements, role permissions, domain rules, preliminary API, database model, ER design, relational schema, and normalization | Documented. Phase 0, Phase 1, and Phase 2 are complete as documentation/design. | The tracked application/SQL files are zero-byte scaffold placeholders; no runtime behavior has been exercised or verified. |
+| Repository scaffold | Initial scaffold commit `88fd043` (`chore: initialize project structure`) is present in `main` ancestry through merge commit `3335268`. | Folder/file setup is present only. This is not the runnable Phase 4 foundation and does not complete any implementation phase. |
+| UI | Thirty planned screens and shared UI requirements are described in `ui-screen-map.md`. | No screens are implemented or verified. |
+| Database | Fourteen logical entities, constraints/invariants, sample-data targets, and selected DBMS features are designed in `database-design.md`. | `database/setup.sql`, all migration and seed placeholders, and `database/README.md` were empty at inspection. No physical schema, DDL/DML, project database setup, or sample data is implemented. The user's Workbench connection is environment evidence only; it does not establish that the project schema was loaded. |
+| API | Preliminary routes, roles, payload outlines, security behavior, and report operations appear in `api-design.md`. | No API routes or endpoint behavior are implemented or verified. |
+
+Phase 3 database implementation and later application phases require explicit authorization under `AGENTS.md` and `development-plan.md`.
+
+## 2. Screen-to-API coverage
+
+Route names below are the planned contracts in `api-design.md`; they are not implemented endpoints. Detail reads, password change, and allocation-history retrieval requested by the screen baseline are now approved documentation contracts. The frontend routes remain proposed.
+
+| # / screen | Existing planned endpoint coverage | Coverage note |
+|---|---|---|
+| 1. Login | `POST /api/auth/login`; `POST /api/auth/logout` | Login is covered. Logout is a separate authenticated operation; no logout control is assigned to a dedicated screen. |
+| 2. Unauthorized / Access Denied | No dedicated endpoint; protected endpoints return safe authorization errors. | Presentation-only screen; backend authorization remains required. |
+| 3. Not Found / 404 | None | Presentation/router fallback; no API endpoint needed. |
+| 4. Donor Dashboard | `GET /api/donors/me/eligibility`; `GET /api/donors/me/bookings`; `GET /api/donors/me/donations`; `GET /api/donors/me/reports/activity` | Summary data is available across existing planned operations. |
+| 5. Donor Profile | `GET/PATCH /api/donors/me`; `GET /api/blood-groups` | Own profile read/update and group lookup are covered. |
+| 6. Eligibility Status | `GET /api/donors/me/eligibility`; `GET /api/donors/me/donations` | Advisory status and high-level history are covered. Staff decisions are recorded by `POST /api/admin/donors/{donorId}/eligibility-decisions`. |
+| 7. Available Donation Slots | `GET /api/donation-slots`; `POST /api/donors/me/bookings` | Slot listing and a booking operation are mapped; the exact eligibility predicate and evaluation date remain OPEN. |
+| 8. My Bookings | `GET /api/donors/me/bookings`; `POST /api/donors/me/bookings/{bookingId}/cancellation` | Own booking list and cancellation are covered. |
+| 9. Donation History | `GET /api/donors/me/donations` | High-level own history is covered. |
+| 10. Hospital Dashboard | `GET /api/hospitals/me/reports/requests`; `GET /api/hospitals/me/requests` | Own request summary/list are covered. |
+| 11. Hospital Profile | `GET/PATCH /api/hospitals/me` | Own profile read/update are covered. |
+| 12. Create Blood Request | `POST /api/hospitals/me/requests`; `GET /api/blood-groups` | Request creation and group lookup are covered. |
+| 13. My Blood Requests | `GET /api/hospitals/me/requests` | Own request list/filter is covered. |
+| 14. Blood Request Details | `GET /api/hospitals/me/requests/{requestId}`; `POST /api/hospitals/me/requests/{requestId}/cancellation` | Own request details and cancellation are covered. |
+| 15. Admin Dashboard | `GET /api/admin/reports/inventory`; `GET /api/admin/reports/donations`; `GET /api/admin/reports/requests` | Compose the dashboard from existing planned report endpoints; no dedicated dashboard endpoint is needed. |
+| 16. Donor Management | `GET /api/admin/donors`; `GET /api/admin/accounts` | Search and account-state filters are covered. |
+| 17. Donor Details / Edit Donor | `GET/PATCH /api/admin/donors/{donorId}`; `POST /api/admin/donors/{donorId}/eligibility-decisions`; `PATCH /api/admin/accounts/{accountId}` | Detail read, edit, eligibility, and account actions are covered by planned contracts. |
+| 18. Donation Slot Management | `GET /api/donation-slots`; `POST /api/admin/donation-slots`; `PATCH /api/admin/donation-slots/{slotId}` | List/create/update/cancel future slots are covered. |
+| 19. Bookings Management | `GET /api/admin/bookings`; `PATCH /api/admin/bookings/{bookingId}/status` | Search and status/check-in operations are covered. |
+| 20. Donation Processing | `POST /api/admin/donations`; `GET /api/admin/bookings`; `POST /api/admin/donors/{donorId}/eligibility-decisions` | Staff can find bookings, record a day-of decision, and record the donation outcome. Ensure decision and donation are tied to the same donor/booking. |
+| 21. Donation Testing / Approval | `GET /api/admin/donations`; `POST /api/admin/donations/{donationId}/testing-decision` | Find and decide release status are covered. |
+| 22. Blood Inventory | `GET /api/inventory`; `POST /api/admin/inventory/expiry/run` | Search and explicit expiry reconciliation are covered; scheduled expiry is a database design feature, not a screen endpoint. |
+| 23. Blood Unit Details | `GET /api/admin/inventory/{bloodUnitId}`; `POST /api/admin/inventory/{bloodUnitId}/discard`; allocation/issue routes below | Approved detail GET returns screen-required unit/source/allocation summary fields. |
+| 24. Hospital Management | `GET /api/admin/hospitals`; `GET /api/admin/hospitals/{hospitalId}`; `GET /api/admin/accounts`; `PATCH /api/admin/accounts/{accountId}` | Approved Admin list/detail contracts cover screen reads; account status changes reuse the existing account endpoint. |
+| 25. Blood Request Management | `GET /api/admin/requests`; `GET /api/admin/requests/{requestId}`; `POST /api/admin/requests/{requestId}/review`; `PATCH /api/admin/requests/{requestId}/priority` | Queue, details, review/status, rejection, and priority operations are covered by planned contracts. |
+| 26. Request Allocation | `GET /api/admin/requests/{requestId}` (includes allocation history); `POST /api/admin/requests/{requestId}/allocations`; `POST /api/admin/allocations/{allocationId}/cancellation`; `POST /api/admin/allocations/{allocationId}/issue`; `GET /api/inventory` | The Admin request-detail response includes only allocations belonging to that request; no second allocation-history GET is defined. |
+| 27. Compatibility Management | `GET /api/blood-groups`; `PATCH /api/admin/blood-compatibility/{donorGroupId}/{recipientGroupId}`; `PATCH /api/admin/blood-groups/{groupId}` | Matrix read and reviewed compatibility/group updates are covered. |
+| 28. Audit Log | `GET /api/admin/audit-events` | Search is covered. |
+| 29. Reports & Analytics | `GET /api/admin/reports/inventory`; `GET /api/admin/reports/donations`; `GET /api/admin/reports/requests` | The listed aggregate reports are covered. |
+| 30. Account / Password Settings | `GET /api/auth/me`; `POST /api/auth/password`; `POST /api/auth/logout` | Password change is an approved planned contract; the shared registration/password policy remains to be specified. |
+
+### Coverage summary
+
+All 30 screens have a documented planned route/screen entry and mapped read or action operations where identified. This is screen-level coverage, not a claim that every operation implied by a screen has a complete approved contract. The detail-read and password-change additions are approved planned contracts in `api-design.md`, not implemented endpoints. Allocation history is included in the Admin request-detail response; no separate allocation-history GET is defined. Donor and Hospital report endpoints feed their dashboards; the Admin dashboard composes existing report endpoints. Staff-created accounts, donation corrections, Admin request cancellation, and other gaps remain OPEN in the table below. Theme assignments remain OPEN.
+
+## 3. Business-rule consistency
+
+| Topic | Documented rule and consistency review | Readiness note / reference |
+|---|---|---|
+| Role authorization | Default deny; explicit role and ownership checks; Admin / Blood Bank Staff performs operational actions. UI visibility is not authorization. | Consistent in `role-permissions.md`, `architecture.md`, `api-design.md`, and `ui-screen-map.md`. Backend authorization must be implemented and verified on every protected resource/action. |
+| Resource ownership | Donor and Hospital “me” resources derive identity from session; hospital can only see own requests; donor can only see own profile/bookings/history. Client-supplied actor or owner IDs are not trusted. | Consistent. Admin entity IDs remain subject to role authorization. See `role-permissions.md` and API contract preamble. |
+| Account states | `PENDING`, `ACTIVE`, `SUSPENDED`; registration, limited pending access, session revocation, audited reactivation, and fresh login are specified in `api-design.md`/`role-permissions.md`. | Resolved at documentation level; runtime enforcement remains unimplemented and unverified. |
+| Eligibility | Advisory preview; 56-day interval from successful `COLLECTED` outcome; latest staff decision and temporary deferral affect eligibility. | The interval and decision history are documented, but the booking acceptance predicate remains OPEN: resolve the evaluation date and whether `REVIEW_REQUIRED` blocks booking. See `domain-rules.md`. |
+| Booking capacity | `BOOKED` and `CHECKED_IN` occupy capacity; the other four schema statuses do not. Reject capacity reduction below occupancy and schedule edits once any booking row exists; preserve cancellation rules. | Resolved in `domain-rules.md`, `database-design.md`, and `api-design.md`; slot location is not an existing schema/API field. |
+| Donation processing/testing | Outcome recording creates no unit. Approval of a collected donation with a confirmed group creates exactly one unit atomically and idempotently. | Response semantics are aligned in `api-design.md`; behavior is planned and not implemented/verified. |
+| Unit expiry | Shelf life is a configurable 42 calendar days; unit is allocatable only before expiry. Daily Asia/Kolkata scheduler expires due available units and cancels/expires due unissued allocations atomically. Issue/allocation recheck validity. | Consistent at design level. Confirm MySQL version, Event Scheduler support/privileges; otherwise use only the documented application-scheduler fallback. `database-design.md`, `architecture.md`, `AGENTS.md`. |
+| Compatibility direction | Matrix is directed from donor-unit group to recipient group, for educational red-cell model. | Use the complete matrix in `domain-rules.md`; verify any Phase 3 seed rows against that documented matrix. It is not a clinical decision rule. |
+| FEFO allocation | Admin allocation locks/rechecks eligible units and sorts expiry, collection time, then unit ID. Only approved, available, compatible, unexpired units may be allocated; partial fulfillment is allowed. | Consistent in `database-design.md` and `domain-rules.md`. `intendedIssueDate` must be checked against expiry, and issue rechecks actual current validity. |
+| Cancellation | Donor may cancel own booking before slot start. Hospital may cancel its request before any unit is issued. Individual allocation cancellation is pre-issue; expired/discarded units are not restored as available. | Staff cancellation after partial issue is OPEN in `domain-rules.md`, `api-design.md`, and `role-permissions.md`; no Admin request-cancellation route is approved. If permission is approved, retaining issued rows and releasing unissued allocations is proposed only. Phase 3 must verify any approved cancellation/issue serialization under the shared locking strategy. |
+| Issuing | Issue is a separate transaction from allocation; it locks allocation/unit, validates allocated and valid state, marks both issued, records handoff, and recomputes request status. | Consistent in `database-design.md`, `domain-rules.md`, and API endpoint. Handoff reference format and whether `issuedAt` can be supplied or server-generated are implementation details to settle in API finalization. |
+| Request fulfillment | Derive status from current `ALLOCATED` and `ISSUED` quantities; fulfilled requires issued quantity exactly equal to request quantity; terminal states never regress; allocate at most requested minus current allocated and issued. | Resolved in `domain-rules.md` and specified for implementation/verification in `database-design.md`. |
+
+### Open contract decisions and narrow proposals
+
+The items below are unresolved design/API questions, not approved new behavior. Proposals are options for review; no new endpoint, status, field, or permission is authorized by listing them.
+
+| Decision | Conflicting/current references and impact | Narrow proposal (OPEN) |
+|---|---|---|
+| Staff donation corrections | `role-permissions.md` permits correction of completed donation records with an audit reason, while `api-design.md` defines recording and testing decision only. Corrections could affect release state and an existing unit. | Either define a bounded, reasoned correction contract with atomic rules for any resulting BloodUnit/allocations, or remove correction permission. Do not implement broad donation editing before this is decided. |
+| Staff-created non-admin accounts | `role-permissions.md` permits Admin to create/approve/suspend non-admin profiles; `api-design.md` only defines public Donor/Hospital registration plus account-state PATCH. | Decide whether staff creation is in scope. If yes, specify which role/profile combinations and pending status; otherwise narrow the matrix to public registration plus staff review. No creation route is approved here. |
+| Compatibility lookup visibility | `api-design.md` exposes group/matrix lookup to authenticated users; `domain-rules.md` says read-only compatibility for other roles; `role-permissions.md` limits Hospitals to requestable groups and Donors to their own confirmed group. PENDING profiles also need profile lookups. | Define role/status-specific fields and whether group lookup is limited to active request creation, own-profile values, or the full matrix. Keep any Admin full-matrix response separate if needed; no endpoint duplication. |
+| Booking acceptance predicate and date | `domain-rules.md` says latest staff decision and the 56-day interval affect display/booking, while the booking bullet names only ACTIVE status, interval, and overlapping booking. `REVIEW_REQUIRED` and evaluation date (today versus appointment date) are not fully resolved. | Specify one predicate that includes account, slot/capacity, overlap, 56-day interval, and latest decision; decide whether `REVIEW_REQUIRED` blocks booking and which local date is evaluated. Keep day-of staff acceptance separate. |
+| Checked-in attendance without collection | `domain-rules.md` permits no-donation resolution but does not say whether it creates a `Donation` row or what records the resolution. `Donation` already supports `DEFERRED`; `Booking` has no separate attended-without-donation status. | Confirm whether a checked-in, non-collected visit is recorded as `Donation.outcome=DEFERRED` and `Booking=COMPLETED`; otherwise define the use of existing fields without adding a status. |
+| Indefinite review | `domain-rules.md` describes indefinite deferral until staff review; schema/API provide `REVIEW_REQUIRED` and nullable `deferred_until`, but the mapping and booking block/supersession behavior are unclear. | Use existing `REVIEW_REQUIRED` with no `deferred_until` as the candidate representation and define what staff decision clears it. Confirm this mapping before implementation. |
+| Staff cancellation after partial issue | Hospital cancellation is pre-issue. The domain state model includes `PARTIALLY_FULFILLED -> CANCELLED`, but role permissions/API do not settle whether staff may cancel after issue; no Admin cancellation route exists. This affects terminal status, issued history, remaining allocations, and audit behavior. | OPEN: decide whether staff may cancel a partially issued request. If approved, proposed behavior is to retain issued Allocation rows/units and cancel/release only unissued allocations, with reason/audit. Define the Admin API contract only after that decision. Hospital cancellation remains pre-issue. |
+| Inactive blood groups | `BloodGroup.is_active` and Admin activation/deactivation exist, but request creation, donor profile lookup, allocation, and historical reads do not specify the effect. | Candidate rule: exclude inactive groups from new choices/requests/allocations, while preserving historical display. Decide whether pending requests can be fulfilled after a group is deactivated. |
+| Event timestamps and deterministic latest decision | `api-design.md` accepts `issuedAt`; `EligibilityDecision` has `decided_at` and the index orders by time but gives no tie-break. Client control of operational timestamps could distort audit/eligibility ordering. | Prefer server-generated mutation timestamps, with any correction/import path separately restricted and audited; order equal `decided_at` rows by stable decision ID. Confirm before final API contract. |
+
+Resolved cross-document points: the unique donor/slot key prohibits rebooking a cancelled slot and this consequence is now stated in the API/UI documentation; `domain-rules.md` no longer lists role-change or immutable request-quantity events as current audit operations; Thulasi owns the Donor Dashboard/activity endpoint, while Lathikaa owns Hospital/Admin dashboards and aggregate reports. These points are recorded in `domain-rules.md`, `api-design.md`, `ui-screen-map.md`, and `team-workflow.md`.
+
+## 4. Account workflow
+
+### Resolved access rules
+
+- Public Donor/Hospital registration creates `PENDING`; Admin accounts remain manually/out-of-band provisioned.
+- PENDING Donor/Hospital accounts may authenticate only to view approval status, read/update permitted own profile fields, change their password, and log out. Operational actions require `ACTIVE` status.
+- SUSPENDED accounts cannot establish sessions. Suspension revokes existing sessions, and every protected request checks current account status, role, and ownership.
+- Reactivation is an audited staff action and requires a fresh login. A session revoked by suspension remains invalid.
+- Own-profile routes and `/api/auth/me` remain the status/profile surfaces; no screen is added beyond the 30-screen baseline.
+- Password change is an approved planned `POST /api/auth/password` contract. It verifies the current password, validates the new password server-side against the registration policy, stores only a bcrypt hash, audits without password values or hashes, revokes every account session including the current one, and requires login again. CSRF protection and login rate limiting remain in force. Public recovery is out of scope.
+
+### Remaining narrow decision
+
+The registration contract currently has no concrete password policy. Specify one shared policy for registration and password change before implementing authentication. No policy has been invented in this review.
+
+## 5. Proposed implementation order and ownership
+
+The sequence below is dependency-based and does not authorize implementation. Shared foundations are integrated first; then complete domain features may proceed in parallel once dependencies are on `main`. Each feature owner handles its database, backend/API, frontend/UI, validation, testing, and feature documentation. See `team-workflow.md`.
+
+| Milestone | Dependency and deliverable | Full-feature ownership and integration |
+|---|---|---|
+| 0. Shared decision/integration agreement | Agree module boundaries, schema/API ownership, dependency order, shared status/error/session contracts, and what evidence gates parallel work. Documentation coordination only; no application foundation is implemented here. | Thulasi and Lathikaa coordinate and review. |
+| 1. Phase 3 database modules | Build coordinated schema modules and sample data, assemble in dependency order, implement selected view/procedure/trigger/expiry design, and verify constraints/transactions/concurrency on target MySQL. Phase 3 does not authorize React/Express work by itself. | Thulasi owns authentication/donor/eligibility/booking/donation/inventory database modules; Lathikaa owns hospital/request/compatibility/allocation/audit/report database modules. Coordinate shared Account, Booking, Donation, BloodUnit, HospitalRequest, Allocation, RequestStatusHistory, and AuditEvent dependencies. |
+| 2. Phase 4 shared application foundation | After verified database work and separate Phase 4 authorization, establish React/Express structure, mysql2 pool, environment configuration, shared API/error/auth/session/CSRF conventions, route/navigation shell, and local connectivity. | Shared, coordinated foundation is integrated into `main` before feature parallelism. |
+| 3. Phase 5 authentication and role access | Implement registration/login/logout/current identity, pending/suspended rules, approval/reactivation, and agreed password change. This is the shared operational gate for protected domain features. | Thulasi owns the complete Authentication & Role Access feature; Lathikaa reviews and integrates against the shared contract. |
+| 4. Parallel domain features after dependencies integrate | Implement donor/eligibility/booking/donation/inventory features and hospital/request features. Hospital profile and request work can proceed alongside Thulasi's donor workflows; compatibility/FEFO allocation and issuing begin once the inventory and request interfaces they depend on are integrated. | Thulasi owns complete donor, eligibility/booking, donation, and inventory features. Lathikaa owns complete hospital/request, compatibility/allocation, and related operational tracking features. Coordinate shared files/contracts and integrate dependencies through reviewed PRs. |
+| 5. Dashboards, reports, and audit views | Build report/dashboard and audit UI after stable domain contracts; audit recording and request-history infrastructure must accompany the first operations that require them. | Lathikaa owns Audit & Operational Tracking and Dashboard & Reports end-to-end; feature owners include their audit writes with their operations. The audit screen may be delivered later. |
+| 6. Cross-feature verification and handoff | Verify role/ownership/state rules, database constraints, lifecycle transitions, reports, setup, and documentation; record actual evidence. | Both developers review and understand each other's work; other teammates can support report preparation, test documentation, screenshots, and presentation. |
+
+### Database dependencies and locking integration
+
+Database setup eventually executes coordinated modules in dependency order. Shared dependencies include Account, BloodGroup/Compatibility, DonationSlot/Booking/EligibilityDecision, Donation/BloodUnit, Hospital/HospitalRequest, Allocation, RequestStatusHistory, and AuditEvent. A consistent lock strategy must cover allocation, issue, cancellation, discard, and expiry; implement and verify it with concurrent MySQL connections in Phase 3. Do not claim this is already verified.
+
+## 6. Readiness conclusion
+
+The project is design-ready for Phase 3 subject to explicit authorization, target-environment checks, and the affected open domain contracts. The specified detail-read/password-change additions, account access rules, donation outcome/unit-creation boundary, and allocation quantity/status rules are documented as planned contracts. Other operations remain open where identified above; none represents implemented behavior.
+
+The initial scaffold is already integrated into `main`, but remains empty placeholders. This is repository setup evidence only; Phase 3 database work and the separate Phase 4 runnable application foundation remain unimplemented. The open contract decisions above block only the affected schema/API/UI behavior; they do not all block unrelated foundational database work.
+
+### Remaining database-phase blockers/checks
+
+1. Confirm named `Asia/Kolkata` time-zone support and event-creation privileges before relying on the scheduled expiry design. User-reported MySQL Workbench evidence from 2026-10-08 is server `8.0.46`, Event Scheduler `ON`, global/session zones `SYSTEM`, system zone `India Standard Time`; this task did not query MySQL. The recovered historical CLI `sql_mode` is recorded in `database-design-inputs.md`. The output has no observation date in the recovered excerpt and was not queried by this task. These observations are one developer's local environment, not evidence for Lathikaa's environment. See `database-design-inputs.md`.
+2. During Phase 3, implement and verify one consistent locking strategy across allocation, issue, cancellation, discard, and expiry using concurrent MySQL connections. This concurrency behavior remains unverified.
+3. Phase 3 remains an explicit authorization gate. Its 14 entities, 12 major tables, and sample-row minimum are documented; execute coordinated modules in dependency order when authorized. `DonationSlot` has no location field; schedule edits are prohibited after bookings exist, and location is not modeled by current contracts.
+
+These database environment and implementation checks do not make every later application configuration or screen choice a schema blocker. Audit/history relations must exist before any operation that writes them, as detailed in `database/README.md`.
+
+### Dependency and decision gates
+
+| Work item | Must be available or resolved first | What remains open / effect |
+|---|---|---|
+| Foundation and profile schema modules | Approved 14-entity model; coordinated migration ownership/numbering; Account before Donor/Hospital profiles; BloodGroup before group FKs | The documented empty SQL placeholders are not migrations. Cross-owner shared tables/fixtures require coordination. |
+| Audited mutations and request transitions | `AuditEvent`, `RequestStatusHistory`, and referenced domain tables exist before any mutation/fixture/routine that writes them | Setup order is documented in `database/README.md`; concrete SQL dependency order must be implemented and verified before invoking routines/events. |
+| Booking/eligibility behavior | Account status, slot occupancy/status rules, 56-day interval, latest staff decision | Resolve booking evaluation date and `REVIEW_REQUIRED` blocking. Same-slot repeat booking is already explicitly prohibited by the schema key. |
+| Donation attendance edge | Booking/eligibility/donation records | Resolve whether checked-in non-collected attendance requires `Donation=DEFERRED`; no new status is authorized. |
+| Allocation procedure and request API | Request, unit, compatibility, Allocation, history, and audit objects integrated; only reviewed request states may allocate | Procedure must accept only `UNDER_REVIEW`, `AWAITING_INVENTORY`, or `PARTIALLY_FULFILLED`; preserve all quantity and terminal-state rules. Concurrency remains a Phase 3 verification requirement. |
+| Staff account/donation correction and request cancellation operations | Existing permission/domain policies plus approved API contract | Staff-created accounts, donation corrections, and Admin request cancellation are open contract gaps; they block those operations, not unrelated schema foundations. |
+| Compatibility/group lookup and active groups | BloodGroup/Compatibility data and role permissions | Decide role/status-specific lookup fields and inactive-group effects before implementing affected profile/request/allocation actions. |
+| Database expiry scheduler | MySQL 8.0.46 user-observed local server; expiry tables/routine/audit prerequisites | Named time-zone support, event-creation privileges, teammate environment, and concurrent locking remain to be verified. Do not treat Scheduler `ON` alone as sufficient. |
+| Authentication implementation | Account schema, app foundation, CSRF/session contracts | Concrete shared password policy and session/configuration choices remain later application decisions; they do not block logical schema design. |
+| Page-level UI work | Approved API/domain contracts and a per-page theme choice | Recommend a theme before each later page task; use the user's selection. All current assignments remain OPEN. |
+
+### Later application decisions
+
+- Agree the concrete password policy once for both registration and password change; current documentation does not specify one.
+- Select the server-side session store and deployment-specific cookie, CSRF, and CORS settings during the application foundation phase.
+- Keep page theme assignments open until each later screen task; recommend a purpose-fit theme and use the user's selection.
+- Finalize remaining pagination, validation/error details, and dashboard metric definitions without adding unapproved thresholds or metrics.
