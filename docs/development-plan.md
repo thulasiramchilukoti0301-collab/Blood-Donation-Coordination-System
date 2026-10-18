@@ -4,7 +4,7 @@ This plan divides the project into reviewable phases. Phases 0, 1, and 2 are com
 
 The approved architecture remains React, Node.js/Express, MySQL, `mysql2`, bcrypt, server-side sessions, and Chart.js. See `team-workflow.md` for full-feature ownership. Shared foundations are integrated sequentially; domain feature work can proceed in parallel after dependencies are available on `main`.
 
-The one-time repository scaffold commit (`88fd043`, `chore: initialize project structure`) is present in `main` ancestry through merge commit `3335268`. It consists of tracked folder/file placeholders only; the current `backend`, `frontend`, and `database` runtime/SQL files are empty. This does not count as Phase 3 database implementation or the runnable Phase 4 application foundation. The feature implementation phases remain unstarted and require their existing explicit authorization gates.
+The one-time repository scaffold commit (`88fd043`, `chore: initialize project structure`) is present in `main` ancestry through merge commit `3335268`. Lathikaa's integrated application foundation (`39e6a3c`) adds the React/Vite client, Express API, mysql2 pool/configuration, and health/connectivity checks. It maps to the foundation and connectivity components of official Phase 4; it does not complete authentication, sessions, feature workflows, or database schema. Official Phase 3 is partially implemented only when its explicitly authorized database deliverables are present; the current bounded Account/BloodGroup milestone alone does not complete it.
 
 ## Phase 0 — Scope and project conventions (complete)
 
@@ -29,7 +29,7 @@ The one-time repository scaffold commit (`88fd043`, `chore: initialize project s
 - Define major-table list and sample-data minimum.
 - **Deliverables:** `docs/database-design.md`, `docs/relational-schema.md`, `docs/normalization.md`, `docs/er-design.md`, and resolved `docs/database-design-inputs.md`. No executable SQL or schema deployment in this phase.
 
-## Phase 3 — Database implementation and local verification
+## Phase 3 — Database implementation and local verification (in progress; bounded foundation milestone)
 
 - Divide database work into coordinated feature modules aligned to `team-workflow.md` ownership; coordinate shared relations and invariants.
 - Create DDL and DML for the approved logical design; add at least ten sample records to every major table.
@@ -38,13 +38,16 @@ The one-time repository scaffold commit (`88fd043`, `chore: initialize project s
 - Audit recording and RequestStatusHistory infrastructure must accompany the first operations that require those records; the audit-log screen may be implemented later.
 - **Deliverables:** reviewed SQL artifacts and local database verification evidence. Do not apply to a shared/live database without authorization.
 - Completing Phase 3 does not by itself authorize React or Express implementation; Phase 4 remains a separate authorization gate.
+- The bounded local foundation milestone authors only `001_foundation.sql` (BloodGroup), `002_auth.sql` (Account), the eight-row BloodGroup reference seed, a foundation-only setup path, and disposable-schema verification. It leaves the other 11 major tables, the remaining 12 logical entities including BloodCompatibility, domain data, all other seeds, procedures, triggers, reports, and expiry work to later explicitly authorized modules. No Account fixture is permanent.
+- User-reported local evidence records successful foundation setup on `blood_donation_coordination` and successful verification on both named disposable schemas, including all 21 negative checks each; reruns against both populated disposable schemas returned exit code 1 and were followed by successful verification. This evidence completes only the bounded setup/verification milestone. The remaining Phase 3 deliverables are still in progress.
 
-## Phase 4 — Project foundation and connectivity
+## Phase 4 — Project foundation and connectivity (foundation/connectivity components complete)
 
-- Turn the existing empty React/Express scaffold placeholders into a runnable project structure and development configuration; do not count the one-time folder scaffold as this deliverable.
+- The runnable React/Express structure and development configuration were integrated in Lathikaa's personal Phase 1 foundation commit; this maps to these official Phase 4 components. Personal phase labels do not renumber official project phases.
 - Configure environment-based settings and MySQL connection pooling with `mysql2`.
 - Add a minimal connectivity path and consistent error handling.
 - **Deliverables:** runnable client/server foundation and documented local setup.
+- User-reported `check:db` success using the configured application account provides live connectivity evidence. The API health test's injected database success is separate. Authentication, sessions, business routes, and the remaining Phase 4 work are not implemented.
 
 ## Phase 5 — Authentication and role access
 

@@ -39,4 +39,4 @@ Phase 1 candidate entities and open questions have been resolved into the Phase 
 
 No item above proves that schema migrations, event definitions, or application code have been run. Named time-zone support, event-creation privileges, and the other developer's environment remain open.
 
-These are environment/implementation checks, not unresolved domain modeling choices. The physical schema and SQL syntax remain to be authored in the later database implementation phase.
+These are environment/implementation checks, not unresolved domain modeling choices. Physical SQL is authored only for the bounded Account/BloodGroup foundation in this milestone; remaining schema modules, routines, seeds, and database verification remain for later Phase 3 work.
