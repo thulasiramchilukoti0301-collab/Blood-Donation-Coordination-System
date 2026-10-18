@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This is the logical/physical design proposal for MySQL, not executable DDL. No SQL scripts, database connection, or data seeding are part of this phase. Proposed types assume MySQL 8.0.16+ so `CHECK` constraints are enforced; generated columns and InnoDB transactions are used for allocation integrity. Dates and local appointment timestamps use `Asia/Kolkata`; persisted `DATETIME` values are interpreted in that project timezone, with server and MySQL session timezone configured consistently.
+This document is the approved logical schema and implementation proposal for MySQL. The bounded official Phase 3 foundation has separate executable DDL and a reference seed in `database/migrations/001_foundation.sql`, `database/migrations/002_auth.sql`, and `database/seeds/reference_data.sql`; those files implement only BloodGroup and Account. Other attributes below remain design requirements, not claims that the remaining tables are implemented. Proposed types assume MySQL 8.0.16+ so `CHECK` constraints are enforced; generated columns and InnoDB transactions are used for allocation integrity. Dates and local appointment timestamps use `Asia/Kolkata`; persisted `DATETIME` values are interpreted in that project timezone, with server and MySQL session timezone configured consistently.
 
 ## Design decisions
 
@@ -307,7 +307,7 @@ Request status changes use the dedicated FK-backed RequestStatusHistory, not gen
 
 ## CRUD and query/report examples planned
 
-No SQL is created in this phase. Later SQL evidence should include:
+The logical design phase itself produced no SQL. For the bounded Phase 3 SQL currently authorized, see `database/README.md`; the remaining Phase 3 implementation and SQL evidence should include:
 
 - **Create:** insert a booking/request; update lifecycle via controlled status operations.
 - **Read/search:** donor by group/area/status; slots by open status/date; units by group/status/expiry; requests by status/priority/date and Hospital.

@@ -7,9 +7,10 @@ This repository is for the **Blood Donation Coordination System**, a college DBM
 ## Workflow boundaries
 
 - Work only on the phase the user explicitly authorizes. Planning documents do not authorize implementation.
-- Phase 2 database design is complete. Phase 3 database implementation is the next phase and may begin only after the user explicitly approves it.
-- The initial backend/frontend/database folder scaffold has been integrated into `main`, but its tracked SQL/runtime files are empty placeholders. This repository setup is not Phase 3 or Phase 4 implementation evidence.
-- Do not create application code, database tables, migrations, or sample data until implementation is explicitly requested.
+- Phase 2 database design is complete. Phase 3 database implementation requires explicit user authorization; authorization for a bounded Phase 3 milestone does not authorize unrelated schema or feature work.
+- A one-time empty repository scaffold is in `main` ancestry. Lathikaa's integrated Phase 1 personal foundation is also present: React/Vite client, Express API, mysql2 configuration, and health/connectivity checks. It maps to the corresponding official Phase 4 foundation/connectivity deliverables; authentication, sessions, domain features, and schema-dependent connectivity remain incomplete.
+- The current approved Phase 3 milestone implements only the shared foundation/BloodGroup and Account DDL plus the eight BloodGroup references and disposable verification tooling. This does not complete Phase 3. Do not create other tables or application features without their explicit authorization.
+- Do not create application code, database tables, migrations, or sample data outside the explicitly authorized bounded milestone.
 - Do not create executable SQL, install dependencies, alter Git configuration, or commit/push unless explicitly requested.
 - Keep the application within the agreed scope in `docs/project-scope.md`; ask before adding features that change it materially.
 - Preserve existing user work. Review repository state before editing files.
@@ -33,7 +34,7 @@ This repository is for the **Blood Donation Coordination System**, a college DBM
 - Represent donation, inventory, hospital request, allocation, and expiry as traceable records with explicit statuses and timestamps where appropriate.
 - Apply donor eligibility and blood compatibility rules consistently in the backend and database operations where practical; document the authoritative rule set before implementation.
 - Use the approved daily MySQL Event Scheduler expiry design, subject to confirming target-server support during Phase 3.
-- In Phase 3, prepare reproducible SQL DDL/DML and at least ten sample rows for every major table listed in `docs/database-design.md`, after explicit authorization.
+- In Phase 3, prepare reproducible SQL DDL/DML and at least ten sample rows for every major table listed in `docs/database-design.md`, after explicit authorization for the relevant work. The foundation milestone's eight BloodGroup lookup rows are not Account fixtures and do not satisfy the later ten-row requirement for each of the 12 major tables.
 - Demonstrate the required relational concepts and operations listed in the scope, including a view and a stored procedure or function, at least one trigger, and expiry handling.
 
 ## Verification and documentation

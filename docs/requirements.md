@@ -71,4 +71,4 @@ The source-separated academic handoff checklist, including user-requested PPT an
 
 ## Phase status
 
-Phase 1 requirements and Phase 2 logical database design are complete. Physical SQL and environment validation remain for Phase 3, which requires explicit user approval.
+Phase 1 requirements and Phase 2 logical database design are complete. The bounded Phase 3 foundation milestone authors Account/BloodGroup DDL and reference data; applying and verifying it requires an authorized local connection. The remaining physical schema, domain data, and DBMS operations are still later Phase 3 deliverables and require their own authorization.

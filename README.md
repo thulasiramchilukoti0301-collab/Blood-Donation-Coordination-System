@@ -1,266 +1,66 @@
 # Blood Donation Coordination System
 
-The Blood Donation Coordination System is a college DBMS Laboratory group mini-project. Its planned application uses React, Node.js with Express, and MySQL through `mysql2`.
+College DBMS Laboratory group project. The approved stack is React, Node.js with Express, MySQL, and `mysql2`.
 
-## Current repository state
+## Current status
 
-Phases 0–2 are complete as scope, requirements, and database-design documentation. The initial scaffold commit (`88fd043`, `chore: initialize project structure`) is present in `main` ancestry through merge commit `3335268`. This one-time folder/file setup is not a completed runnable application foundation: the tracked backend, frontend, and database scaffold files remain empty placeholders. No SQL schema, seed data, application runtime, or feature behavior is implemented or verified. See the [implementation readiness review](docs/implementation-readiness.md) and [development plan](docs/development-plan.md).
+- **Phases 0–2:** scope, requirements, domain/API design, relational schema, ER design, and normalization are documented and complete.
+- **Approved design baseline:** 14 logical entities, 12 major tables, the approved account and workflow status names, the educational 56-day donor interval and 42-day unit shelf life, Asia/Kolkata date/time interpretation, bcrypt with server-side sessions, and 30 planned screens with OPEN theme assignments. These remain design rules; the current foundation does not implement the associated workflows.
+- **Official Phase 4 foundation/connectivity components:** implemented in the integrated Lathikaa foundation commit (`39e6a3c`): React/Vite client, Express API, environment configuration, mysql2 pool, health checks, and automated foundation tests. This maps from Lathikaa's personal Phase 1 work to the corresponding official Phase 4 deliverables. It does not implement authentication, sessions, or domain workflows.
+- **Official Phase 3 database work:** partially implemented as a bounded SQL milestone: shared `BloodGroup` and `Account` tables, eight BloodGroup reference rows, foundation-only setup instructions, and a disposable-schema verifier. The remaining schema modules, operational seeds, procedures, trigger, reporting, expiry, and full concurrency verification are not complete. User-reported local results record successful setup on `blood_donation_coordination` and successful verification, including 21 negative checks each, on two disposable schemas; see the [implementation readiness review](docs/implementation-readiness.md). These results do not complete Phase 3.
+- No Donor/Hospital profiles, booking, donation, inventory, request/allocation, audit, authentication, or application feature routes are implemented. No Account fixture is seeded. See the [implementation readiness review](docs/implementation-readiness.md) and [development plan](docs/development-plan.md).
 
-The repository contains `docs/` for approved design, `database/` for setup/migration/seed placeholders, `backend/` for the Express scaffold, and `frontend/` for the React/Vite scaffold. At this checkpoint the tracked `.sql`, `.js`, `.jsx`, `.json`, and example configuration files in the implementation folders are zero bytes; in particular, the package manifests are not runnable. The directory structure is present, while database and application implementation remain unstarted.
-
-## Project documentation
+## Project documents
 
 - [Project scope](docs/project-scope.md)
-- [Proposed architecture](docs/architecture.md)
-- [Development plan](docs/development-plan.md)
+- [Architecture](docs/architecture.md)
+- [Requirements](docs/requirements.md)
+- [Domain rules](docs/domain-rules.md)
+- [Role permissions](docs/role-permissions.md)
+- [API design](docs/api-design.md)
 - [Database design](docs/database-design.md)
+- [Relational schema](docs/relational-schema.md)
+- [Normalization](docs/normalization.md)
+- [ER design](docs/er-design.md)
+- [Development plan](docs/development-plan.md)
+- [Implementation readiness](docs/implementation-readiness.md)
+- [Team workflow and ownership](docs/team-workflow.md)
 - [UI screen map](docs/ui-screen-map.md)
 - [UI design themes](docs/ui-design.md)
-- [Implementation readiness review](docs/implementation-readiness.md)
-- [Team workflow](docs/team-workflow.md)
-- [Database setup and collaboration plan](database/README.md)
-- [Academic handoff checklist](docs/project-report-checklist.md)
+- [Project report checklist](docs/project-report-checklist.md)
+- [Database setup and collaboration guide](database/README.md)
+- [Phase 4 foundation verification record](docs/phase-1-verification.md)
 
-The database design phase is complete. Database implementation and application code have not been authorized yet; see the [development plan](docs/development-plan.md) for phase boundaries.
-# Blood Donation Coordination System
+## Stack and prerequisites
 
-An academic DBMS Laboratory project for coordinating donors, blood bank staff,
-and hospitals through a React client, Express API, and MySQL database.
+Use Node.js `^20.19.0 || >=22.12.0`, npm, Git, Windows PowerShell, and MySQL 8.0.16 or newer for enforced CHECK constraints. The project uses React/Vite and React Router, Express, `mysql2`, and server-side sessions when authentication is later authorized. Chart.js is reserved for dashboard/report visualizations. The current foundation does not mount `express-session`, create cookies, or implement login. See [architecture](docs/architecture.md) and [API design](docs/api-design.md) for the planned security contract.
 
-**Implementation status: Phase 1 foundation and connectivity only.** The client
-shows live API/database checks. Authentication, registration, role permissions,
-donor workflows, hospitals, donations, inventory, blood requests, allocation,
-audit, and reporting are not implemented. All business module folders and SQL
-scripts remain placeholders.
+## Install and run the current application foundation
 
-## Documentation alignment
-
-The existing design documents use **Blood Bank and Donor Network** as the project
-name and number foundation work as **Phase 4** in `docs/development-plan.md`.
-This implementation follows the user's separately authorized **Phase 1 — Project
-Foundation, Initialization & Connectivity** and requested display name. Existing
-requirements and logical design documents are preserved; their earlier phase
-numbers describe planning work, not implemented application features.
-
-`docs/team-workflow.md` is empty. The explicit collaboration rules for this work
-are: develop on `lathikaa`, integrate through shared `main`, preserve others'
-work, and do not automatically switch, commit, push, merge, or rebase.
-
-## Technology stack
-
-| Area | Installed stack |
-|---|---|
-| Frontend | React, Vite, JavaScript/JSX, React Router DOM, Axios, CSS |
-| Backend | Node.js, Express, mysql2/promise, dotenv, cors, express-session |
-| Database | MySQL; future SQL migrations, foreign keys, InnoDB transactions |
-
-`express-session` is installed but not mounted. No sessions or cookies are
-created yet. Session-store selection is deferred to authentication implementation;
-no MemoryStore or database session tables are enabled. Future session work must
-include a persistent store appropriate to deployment, HttpOnly/SameSite cookies,
-Secure cookies under HTTPS, rotation/invalidation, CSRF protection, and bcrypt
-as documented in `docs/api-design.md`. No bcrypt/chart dependencies are needed
-for connectivity alone.
-
-## Repository structure
-
-```text
-backend/
-  src/config/       Environment configuration and MySQL connection pool
-  src/middleware/   Central errors; auth/roles are comments only
-  src/routes/       Operational health checks
-  src/modules/      Reserved business module directories
-  src/utils/        Safe HTTP errors and database-check command
-  src/app.js        Express application (also importable for tests)
-  src/server.js     Startup and graceful shutdown
-  tests/            Node test runner health/connectivity tests
-frontend/
-  public/
-  src/components/   Connection status presentation
-  src/layouts/      Responsive foundation shell
-  src/services/     Reusable Axios client and health requests
-  src/styles/       Global CSS
-  src/features/     Reserved business feature directories
-database/           Empty SQL setup/migration/seed placeholders; preparation README
-docs/               Approved project scope, requirements and database design
-report/             Reserved submission artifacts
-tests/              Reserved cross-application integration/e2e tests
-```
-
-## Prerequisites
-
-- Node.js satisfying `^20.19.0 || >=22.12.0` and npm. This workspace was verified
-  with Node 20.20.2 and npm 10.8.2; use a currently supported Node release for new
-  installations. Vite's [official requirements](https://vite.dev/guide/) specify
-  the compatible versions.
-- Local MySQL 8.0.16+ and an existing database/application user for a successful
-  database check. The API and frontend can run without database configuration;
-  database health then correctly returns HTTP 503.
-- Git and Windows PowerShell. Use `npm.cmd` to avoid PowerShell script execution
-  policy issues. Commands below start from the repository root.
-
-Check the branch with `git branch --show-current` before editing. This phase
-must be developed on `lathikaa`.
-
-## Backend installation and development
+From the repository root, open separate PowerShell terminals:
 
 ```powershell
 Set-Location .\backend
 npm.cmd ci
-Copy-Item .env.example .env   # First setup only; do not overwrite an existing .env
-notepad .env
+npm.cmd test
+npm.cmd run check:db
 npm.cmd run dev
 ```
 
-The API defaults to `http://localhost:5000`. `dev` uses Node's built-in watch
-mode; `npm.cmd start` runs without watching. Restart after changing `.env`.
-Ctrl+C triggers shutdown: stop accepting requests, finish active requests, close
-the database pool, and exit. Shutdown is bounded to ten seconds.
-
-```powershell
-npm.cmd test
-npm.cmd run check:db
-```
-
-The database command performs `SELECT 1` only, returns exit code 1 on failure,
-and prints a safe error without driver details. Startup checks connectivity but
-continues to serve liveness while the development database is unavailable.
-
-## Frontend installation and development
-
-Open a second PowerShell terminal from the repository root:
+`npm.cmd run check:db` runs `SELECT 1`; it requires a private `backend/.env` with a working local database connection. Without it the command fails safely with `DATABASE_NOT_CONFIGURED`. The user reports that this check succeeded with the configured application account; the private file is ignored by Git. The server can run without database configuration for API liveness.
 
 ```powershell
 Set-Location .\frontend
 npm.cmd ci
-Copy-Item .env.example .env   # First setup only
 npm.cmd run dev
 ```
 
-Open `http://localhost:5173`. Both connection indicators begin in Checking and
-reflect independent actual health responses. Use **Check again** to refresh.
-Network/timeout failures display Unavailable without crashing the page.
+Open `http://localhost:5173`. The current UI reports backend and database health only; it is not the planned role-based application. Run `npm.cmd run build` in `frontend/` to build the client. The earlier Phase 4 foundation checks are recorded in [`docs/phase-1-verification.md`](docs/phase-1-verification.md); the separate user-reported database setup and live connectivity evidence is summarized in [`docs/implementation-readiness.md`](docs/implementation-readiness.md).
 
-```powershell
-npm.cmd run build
-npm.cmd run preview
-```
+## Local database setup
 
-Stop the development server before preview: both use port 5173 to keep the
-credentialed CORS origin consistent. Vite uses a strict port and does not
-silently move to another port. If you change the Vite origin, update backend
-`FRONTEND_URL` to the exact same origin. Use `localhost` consistently; it is a
-different browser origin from `127.0.0.1`.
+Each developer uses a separate local MySQL database. Do not point routine work at shared/live data. Inspect and preserve any existing database. The foundation setup path, stable BloodGroup identifiers, required privileges, exact PowerShell/MySQL client steps, and rerun/failure behavior are documented in [`database/README.md`](database/README.md). Do not apply future placeholder migration/seed files. Keep connection secrets only in the ignored `backend/.env`; never place them in tracked files or command arguments.
 
-## Environment variables
+## Integration workflow
 
-| File / variable | Default or example | Purpose |
-|---|---|---|
-| backend `NODE_ENV` | `development` | Environment label |
-| backend `PORT` | `5000` | API listening port |
-| backend `FRONTEND_URL` | `http://localhost:5173` | Single allowed credentialed browser origin, no trailing slash |
-| backend `DB_HOST` | `127.0.0.1` | MySQL host (required) |
-| backend `DB_PORT` | `3306` | MySQL port |
-| backend `DB_USER` | `blood_donation_app` | Existing MySQL application user (required) |
-| backend `DB_PASSWORD` | empty in example | Enter your real local password; empty means unconfigured |
-| backend `DB_NAME` | `blood_donation_coordination` | Existing database (required) |
-| backend `SESSION_SECRET` | empty in example | Reserved; unused until authentication is authorized |
-| frontend `VITE_API_BASE_URL` | `http://localhost:5000/api` | Public backend API URL, including `/api` |
-
-The frontend client enables `withCredentials`; backend CORS allows the explicit
-frontend origin and credentials, never `*`. Only GET/HEAD/OPTIONS are currently
-advertised for browser requests. Expand methods deliberately when business
-routes are authorized. No login or CSRF implementation is included now.
-
-All `VITE_` variables are public browser configuration. Put database credentials
-only in backend `.env`. `.env` files, dependencies, build outputs, logs, temporary
-files, and local database dumps are ignored; `.env.example` files stay trackable.
-
-## Local MySQL configuration (PowerShell)
-
-Inspect services without changing them:
-
-```powershell
-Get-Service -Name '*mysql*'
-Test-NetConnection 127.0.0.1 -Port 3306
-$mysqlExe = 'C:\Program Files\MySQL\MySQL Server 9.1\bin\mysql.exe'
-& $mysqlExe --version
-```
-
-Adjust the executable path for your installed version. If MySQL is stopped,
-start your intended service in an Administrator PowerShell, for example
-`Start-Service -Name MySQL91`. Do not start another instance on the same port.
-
-Use an existing local database/user where available. If you need a new empty
-development database, open the MySQL client manually with an administrator
-account (`-p` prompts securely for the password):
-
-```powershell
-& $mysqlExe -h 127.0.0.1 -P 3306 -u root -p
-```
-
-Optional manual provisioning only; **these commands have not been executed by
-this implementation**. Replace the example password locally before using them:
-
-```sql
-CREATE DATABASE blood_donation_coordination CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'blood_donation_app'@'127.0.0.1' IDENTIFIED BY 'replace-with-your-local-password';
-GRANT SELECT ON blood_donation_coordination.* TO 'blood_donation_app'@'127.0.0.1';
-```
-
-This creates no tables. Use the actual matching account host for your MySQL
-installation. Configure `.env` with those credentials, then verify read-only:
-
-```powershell
-& $mysqlExe -h 127.0.0.1 -P 3306 -u blood_donation_app -p -D blood_donation_coordination -e 'SELECT 1 AS connected;'
-Set-Location .\backend
-npm.cmd run check:db
-```
-
-Do not run `database/setup.sql` or the empty migrations/seeds. See
-`database/README.md` for planned migration ordering and later schema checks.
-The pool uses `+05:30` for driver conversion and sets the MySQL session timezone
-on each physical connection, consistent with the documented Asia/Kolkata dates.
-
-## Health-check endpoints
-
-```powershell
-Invoke-RestMethod -Uri 'http://localhost:5000/api/health'
-Invoke-RestMethod -Uri 'http://localhost:5000/api/health/db'
-```
-
-| Endpoint | Actual behavior |
-|---|---|
-| `GET /api/health` | 200 with `success: true` and `Blood Donation Coordination System API is running` |
-| `GET /api/health/db` | 200 with `success: true, database: connected` only after a successful `SELECT 1` |
-| Database unconfigured/unavailable | 503 with safe `error.code` and `error.message` |
-| Unknown API route | 404 with `NOT_FOUND` |
-
-To inspect failure status and JSON in Windows PowerShell:
-
-```powershell
-try {
-    $response = Invoke-WebRequest -UseBasicParsing -Uri 'http://localhost:5000/api/health/db'
-    $response.StatusCode
-    $response.Content
-} catch {
-    [int]$_.Exception.Response.StatusCode
-    $_.ErrorDetails.Message
-}
-```
-
-These checks verify process/database connectivity only. They do not prove tables
-exist, migrations ran, credentials have future write privileges, or the domain
-schema is ready. API responses never contain SQL, driver errors, or stack traces.
-
-## Verification and next work
-
-See `docs/phase-1-verification.md` for executed checks, actual results, limitations,
-and the complete changed-file inventory. Lockfiles pin the installed packages;
-use `npm.cmd ci` to reproduce the installation.
-
-Recommended next work is the separately authorized database implementation and
-environment verification described as Phase 3 in the existing development plan.
-Reconcile that numbering with your implementation-phase naming first. No next
-phase, authentication, migration execution, commit, or push is authorized by
-this foundation work.
+Thulasi works on continuing branch `thulasiram`; Lathikaa works on `lathikaa`. Reviewed work enters `main` through PRs. Coordinate shared SQL objects and migration numbering; after syncing integrated SQL from `origin/main`, apply it to each person's own local database using the reviewed setup instructions. See [team workflow](docs/team-workflow.md).
