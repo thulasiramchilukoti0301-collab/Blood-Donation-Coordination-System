@@ -29,7 +29,7 @@ The one-time repository scaffold commit (`88fd043`, `chore: initialize project s
 - Define major-table list and sample-data minimum.
 - **Deliverables:** `docs/database-design.md`, `docs/relational-schema.md`, `docs/normalization.md`, `docs/er-design.md`, and resolved `docs/database-design-inputs.md`. No executable SQL or schema deployment in this phase.
 
-## Phase 3 — Database implementation and local verification (in progress; bounded foundation milestone)
+## Phase 3 — Database implementation and local verification (in progress; bounded foundation and Donor milestones)
 
 - Divide database work into coordinated feature modules aligned to `team-workflow.md` ownership; coordinate shared relations and invariants.
 - Create DDL and DML for the approved logical design; add at least ten sample records to every major table.
@@ -38,7 +38,7 @@ The one-time repository scaffold commit (`88fd043`, `chore: initialize project s
 - Audit recording and RequestStatusHistory infrastructure must accompany the first operations that require those records; the audit-log screen may be implemented later.
 - **Deliverables:** reviewed SQL artifacts and local database verification evidence. Do not apply to a shared/live database without authorization.
 - Completing Phase 3 does not by itself authorize React or Express implementation; Phase 4 remains a separate authorization gate.
-- The bounded local foundation milestone authors only `001_foundation.sql` (BloodGroup), `002_auth.sql` (Account), the eight-row BloodGroup reference seed, a foundation-only setup path, and disposable-schema verification. It leaves the other 11 major tables, the remaining 12 logical entities including BloodCompatibility, domain data, all other seeds, procedures, triggers, reports, and expiry work to later explicitly authorized modules. No Account fixture is permanent.
+- The completed local foundation milestone contains `001_foundation.sql` (BloodGroup), `002_auth.sql` (Account), the eight-row BloodGroup reference seed, a foundation-only setup path, and disposable-schema verification. The bounded Donor milestone adds only `003_donors.sql` and its disposable verifier; it does not expand `apply-foundation.mjs` or `setup.sql`. User-run evidence dated 2026-10-20 records successful preflight, application of only 003 to `blood_donation_coordination`, and fresh disposable verification with 13 negative checks plus successful rollback of ten synthetic Account/Donor pairs and connection cleanup. This completes only the Donor schema verification milestone. The remaining ten major tables, other logical entities including BloodCompatibility, domain data, other seeds, procedures, triggers, reports, expiry, concurrency checks, and future application enforcement remain pending and require their applicable authorization. Donor verifier fixtures are not permanent samples.
 - User-reported local evidence records successful foundation setup on `blood_donation_coordination` and successful verification on both named disposable schemas, including all 21 negative checks each; reruns against both populated disposable schemas returned exit code 1 and were followed by successful verification. This evidence completes only the bounded setup/verification milestone. The remaining Phase 3 deliverables are still in progress.
 
 ## Phase 4 — Project foundation and connectivity (foundation/connectivity components complete)

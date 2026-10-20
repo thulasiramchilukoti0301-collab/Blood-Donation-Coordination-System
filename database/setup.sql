@@ -1,6 +1,8 @@
--- MySQL client script for this bounded official Phase 3 milestone only.
--- Start the mysql client with database/ as its working directory, connect to
--- the intended server without selecting a database, then run: source setup.sql
+-- MySQL client wrapper for the foundation only; it does not include Donor.
+-- It uses nested SOURCE commands. Do not assume an error in a sourced file
+-- stops all later statements. For guarded setup use apply-foundation.mjs; for
+-- manual fail-fast setup, use the direct --skip-force --execute batch in
+-- database/README.md and check the mysql process exit code.
 -- CREATE DATABASE refuses an existing schema; this wrapper never drops or
 -- overwrites a populated schema. Migrations use plain CREATE/INSERT statements.
 CREATE DATABASE blood_donation_coordination
