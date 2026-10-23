@@ -21,7 +21,7 @@ Both developers review and understand each other's work. Other teammates support
 
 Each developer uses a separate local MySQL database. Versioned SQL migrations in `database/migrations/` are the shared, reviewed schema source; local-only schema edits are not authoritative. Coordinate each migration number and shared object before editing or adding a migration. After a reviewed PR is merged and the developer synchronizes from `origin/main`, apply the newly integrated SQL to that developer's own local database using the reviewed setup instructions. Never point routine development or rebuild steps at a shared/live database.
 
-The one-time scaffold commit (`88fd043`) is integrated. Lathikaa's application foundation commit (`39e6a3c`) is also integrated and maps from her personal Phase 1 to the relevant official Phase 4 foundation/connectivity work. The current bounded Phase 3 milestone authors only the foundation/BloodGroup and Account migrations plus the BloodGroup reference seed; database application/verification and all remaining Phase 3 modules are separate. Personal phase labels do not renumber official project phases, and none of this transfers feature ownership or authorizes later work.
+The one-time scaffold commit (`88fd043`) is integrated. Lathikaa's application foundation commit (`39e6a3c`) is also integrated and maps from her personal Phase 1 to the relevant official Phase 4 foundation/connectivity work. Phase 3 database modules are coordinated in the dependency order documented in `database/README.md`; the current DonationSlot/Booking/EligibilityDecision module belongs to Thulasi. Personal phase labels do not renumber official project phases, and none of this transfers feature ownership or authorizes later work.
 
 The database owner/dependency map is maintained in [`database/README.md`](../database/README.md). The feature owner remains responsible for their domain's schema, API, UI, validation, tests, and feature documentation. Shared Account, reference data, audit/history, setup assembly, and cross-domain changes require explicit coordination; agreement on one file or dependency does not transfer another owner's feature.
 
@@ -35,7 +35,15 @@ git switch <own-branch>
 git merge origin/main
 ```
 
-Do not routinely pull the other person's unfinished branch. Dependent work normally becomes available through a reviewed pull request merged into `main`. Direct integration from another development branch is an explicitly coordinated exception.
+Do not routinely pull the other person's unfinished branch. Dependent work normally becomes available through a reviewed pull request merged into `main`. Direct integration from another development branch is an explicitly coordinated exception. The developers have explicitly agreed to exchange selected pushed branch checkpoints and defer the next `main` merge until a larger milestone:
+
+1. Preserve local work first by committing it or deliberately stashing it.
+2. Run `git fetch origin`, inspect the exact agreed pushed commit (`git show --stat <commit>` and review its diff), and confirm it is the checkpoint both developers intend to exchange.
+3. Merge that pushed commit into the receiving developer's own continuing branch, resolving conflicts without discarding local work. Do not reset, overwrite, or force-push. Only pushed commits are available for this exchange; unpushed work is not shared.
+4. Continue feature work on the existing personal branches. If more commits are pushed to `thulasiram` while PR #5 is open, those commits become part of PR #5's cumulative branch diff. Review the full PR diff against its base, not only the latest checkpoint.
+5. At the larger integration milestone, reconcile both branches, review and verify the combined changes, then deliver the combined result to `main` through a reviewed PR.
+
+This checkpoint exchange integrates Git history only. Git merges do not apply migrations or otherwise change either developer's private local MySQL database; each developer applies reviewed SQL separately, in dependency order, to their own database after Git synchronization. Migration ownership and each developer's local-database separation remain unchanged.
 
 ## Review and integration
 
