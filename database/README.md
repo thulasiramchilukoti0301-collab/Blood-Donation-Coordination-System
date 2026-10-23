@@ -2,28 +2,39 @@
 
 ## Current Phase 3 boundary
 
-The approved bounded foundation milestone contains exactly:
+The completed Account/BloodGroup foundation and Donor milestone, the user-verified eligibility/booking storage milestone, and the currently authorized Donation storage milestone contain exactly:
 
 1. `migrations/001_foundation.sql` — `BloodGroup` only.
 2. `migrations/002_auth.sql` — `Account` only.
 3. `seeds/reference_data.sql` — the eight stable `BloodGroup` rows only.
-4. `scripts/apply-foundation.mjs` — loopback-only setup runner that checks required metadata visibility, verifies the selected schema is empty, applies only those two migrations and that seed in order, and exits nonzero on SQL errors. `setup.sql` creates a new named schema (and therefore refuses an existing one) before applying the same objects.
-5. `tests/verify-foundation.mjs` — disposable-schema checks for schema metadata, constraints, defaults, reference values, account status/role values, and expected SQL rejection.
+4. `migrations/003_donors.sql` — Donor only; apply once after the existing Account/BloodGroup foundation and reference seed.
+5. `migrations/005_eligibility_booking.sql` — creates `DonationSlot`, `Booking`, and `EligibilityDecision` in that order; depends on 001, 002, the BloodGroup reference seed, and 003. Migration 004 Hospital is not a dependency.
+6. `scripts/apply-foundation.mjs` — loopback-only foundation setup runner; it remains limited to the empty schema and applies only 001, 002, and the BloodGroup seed. It does not apply 003, 005, or any later module. `setup.sql` is likewise foundation-only.
+7. `tests/verify-foundation.mjs` — disposable-schema checks for foundation metadata, constraints, defaults, reference values, and expected SQL rejection.
+8. `tests/verify-donors.mjs` — schema and behavior verification for Donor in a specifically named disposable schema; it inserts at least ten synthetic Account/Donor pairs in a transaction and requires a successful rollback before reporting success.
+9. `tests/verify-eligibility-booking.mjs` — metadata and rollback-only storage checks for the three tables in a specifically named disposable schema. It does not verify concurrency or booking workflows.
+10. `migrations/006_donations.sql` — creates only `Donation`; depends on `Account` and `Booking` (therefore 001, 002, and 005); 004 Hospital is not a dependency.
+11. `tests/verify-donations.mjs` — metadata and rollback-only storage checks for Donation in a specifically named disposable schema; it does not verify donation workflows, atomic/idempotent BloodUnit creation, authorization, or concurrency.
 
-No other migration or seed placeholder is executable content. Do not apply empty future modules. `BloodCompatibility`, its 64 directed pairs, and its administration remain Lathikaa's coordinated compatibility milestone. No Donor/Hospital profile or permanent Account fixture belongs in this setup. Account/profile completeness requires their future profile tables and application transaction.
+User-run evidence dated 2026-10-20 records that `bddc_phase3_test_donor_20261020_first` was assembled from 001, 002, `reference_data.sql`, then 003; `verify-donors.mjs` passed all 13 negative checks and confirmed rollback of ten synthetic Account/Donor pairs and connection cleanup. The same evidence records that development preflight found Account and BloodGroup with Donor absent, then applying only 003 to `blood_donation_coordination` succeeded. These are user-provided results, not queries or setup actions performed by this documentation update.
 
-This is not the complete Phase 3 database deliverable. The other 11 major tables and 12 remaining logical entities, other domain modules and seeds, routines, view, history/audit infrastructure, expiry, sample data, and concurrent workflow verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; the eight lookup rows here do not satisfy that requirement for any major table.
+Other reserved migration/seed placeholders remain non-executable content. Do not apply empty future modules. `BloodCompatibility`, its 64 directed pairs, and its administration remain Lathikaa's coordinated compatibility milestone. No Hospital profile or permanent Account fixture belongs in this milestone. Account/Donor role matching and atomic registration remain future transaction/service invariants; the foreign keys do not enforce them.
 
-## Physical foundation contract
+This is not the complete Phase 3 database deliverable. User-reported results, reported 2026-10-24, verify 005 eligibility/booking storage and 006 Donation storage only; the exact Donation evidence and remaining limits are recorded under [Donation apply and verification](#donation-apply-and-verification). Codex syntax checks are separate from these user-run database results and did not query MySQL. Donation outcome recording creates no BloodUnit; atomic/idempotent unit creation after approval remains future service work after inventory/audit schema exists. The Donation verifier does not establish authorization, booking/day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, or donation workflows. The remaining seven logical entities, including six major tables, other domain modules/seeds, routines, view, history/audit infrastructure, expiry, sample data, and concurrency verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; all verifier fixtures are rolled back and do not count as shared sample data.
 
-The database default is `utf8mb4` / `utf8mb4_0900_ai_ci`; both tables use InnoDB. Case-insensitive `utf8mb4_0900_ai_ci` is used for email and display names. The app normalizes email to lowercase before storage; the unique index also treats differently cased email as a duplicate. Role/status and group code values use ASCII `ascii_bin` so their documented exact uppercase/literal values are case-sensitive. Times are `DATETIME` interpreted in `Asia/Kolkata`; set SQL/application sessions to `+05:30`. `updated_at` defaults at insert and is maintained explicitly by the application; no `ON UPDATE` clause or timestamp trigger is present.
+## Physical schema contract
+
+The database default is `utf8mb4` / `utf8mb4_0900_ai_ci`; all seven tables defined by the current migrations use InnoDB. Case-insensitive `utf8mb4_0900_ai_ci` is used for email, display names, and Donor text fields. The app normalizes email to lowercase before storage; the unique index also treats differently cased email as a duplicate. Role/status and group code values use ASCII `ascii_bin` so their documented exact uppercase/literal values are case-sensitive. Times are `DATETIME` interpreted in `Asia/Kolkata`; set SQL/application sessions to `+05:30`. `updated_at` defaults at insert and is maintained explicitly by future application operations; no `ON UPDATE` clause or timestamp trigger is present.
 
 | Physical table | Columns and exact types | Constraints |
 |---|---|---|
 | `BloodGroup` | `blood_group_id BIGINT UNSIGNED AUTO_INCREMENT`; `code CHAR(3) ASCII ascii_bin`; `display_name VARCHAR(12) utf8mb4_0900_ai_ci`; `is_active BOOLEAN` (`TINYINT(1)`) | `PRIMARY KEY (blood_group_id)`; `uq_blood_group_code`; `uq_blood_group_display_name`; `ck_blood_group_code`; `ck_blood_group_is_active` |
 | `Account` | `account_id BIGINT UNSIGNED AUTO_INCREMENT`; `email VARCHAR(254) utf8mb4_0900_ai_ci`; `password_hash VARCHAR(255) utf8mb4_0900_ai_ci`; `role VARCHAR(16) ASCII ascii_bin`; `account_status VARCHAR(16) ASCII ascii_bin`; `created_at DATETIME`; `updated_at DATETIME` | `PRIMARY KEY (account_id)`; `uq_account_email`; `ck_account_role`; `ck_account_status` |
+| `Donor` | `account_id BIGINT UNSIGNED` (shared PK, not auto-generated); `full_name VARCHAR(120)`; `date_of_birth DATE`; `phone VARCHAR(30)` (not unique); `address VARCHAR(255)`; `area VARCHAR(100)` NULL; reported/confirmed blood group IDs `BIGINT UNSIGNED` NULL; `created_at` / `updated_at DATETIME` | `PRIMARY KEY (account_id)`; `fk_donor_account`; `fk_donor_reported_blood_group`; `fk_donor_confirmed_blood_group`; `ix_donor_confirmed_blood_group_id`; `ix_donor_full_name`; `ix_donor_reported_blood_group_id` |
 
-MySQL exposes these primary keys in `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` with the physical name `PRIMARY` and type `PRIMARY KEY`. Verification also checks the corresponding single `KEY_COLUMN_USAGE` column (`blood_group_id` or `account_id`); `pk_blood_group` and `pk_account` are not physical constraint names.
+MySQL exposes these primary keys in `INFORMATION_SCHEMA.TABLE_CONSTRAINTS` with the physical name `PRIMARY` and type `PRIMARY KEY`. Verification also checks the corresponding single `KEY_COLUMN_USAGE` column (`blood_group_id`, `account_id`, or `Donor.account_id`); `pk_blood_group` and `pk_account` are not physical constraint names.
+
+The Donor primary key supplies the `account_id` FK index; no duplicate account index is added. Each nullable BloodGroup FK has its own supporting index, and the name index follows the approved donor-filter design. `phone` is not unique. The Donor migration does not enforce Account role/profile matching, atomic registration, future-date rejection, or authorization of confirmed-group changes. Those remain future transaction/service rules. Its timestamp defaults do not automatically update `updated_at`.
 
 `BloodGroup.code` is limited case-sensitively to exactly `O-`, `O+`, `A-`, `A+`, `B-`, `B+`, `AB-`, or `AB+`; `is_active` defaults to TRUE and permits only 0/1. `Account.role` is exactly `ADMIN`, `HOSPITAL`, or `DONOR`; `account_status` is exactly `PENDING`, `ACTIVE`, or `SUSPENDED`, defaulting to `PENDING`. Account `email` is unique and normalized to lowercase at the application boundary. `created_at` and `updated_at` default to the current session timestamp; the application explicitly maintains `updated_at` when it changes an account. Password hashes are stored only in `password_hash`; this migration does not implement authentication or hashing. The exact logical design is in [database design](../docs/database-design.md) and [relational schema](../docs/relational-schema.md). CHECK values are case-sensitive because the checked code columns use `ascii_bin`.
 
@@ -86,19 +97,31 @@ try {
 
 If `backend/.env` is absent, set `DB_HOST` and `DB_PORT` as shown; the setup identity and selected database are supplied separately through the `PHASE3_*` variables. The runner accepts only loopback hosts (`localhost`, `127.0.0.1`, or `::1`). Before writes, it verifies global metadata visibility and checks tables/views, routines, triggers, and events. Any failed visibility check, nonempty schema, connection issue, or SQL error exits nonzero with a safe message. It does not create a database or user. The `finally` block clears the temporary credentials and connection variables even on failure.
 
-Alternatively, for manual MySQL-client use, run the CLI from `database/` and source the wrapper:
+For manual MySQL-client setup, use a direct batch assembled from the canonical SQL files. The supported CLI invocation is `--skip-force --execute`; check the process exit code immediately. Do not rely on interactive `SOURCE` or `setup.sql`'s nested `SOURCE` statements to stop all subsequent statements after an error. For a new foundation database, run this only when the schema name is unused and the local setup identity is authorized to create it:
 
-```text
-source setup.sql
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$foundationSql = @(
+  'CREATE DATABASE blood_donation_coordination CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;'
+  'USE blood_donation_coordination;'
+  "SET time_zone = '+05:30';"
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\001_foundation.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\002_auth.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\seeds\reference_data.sql)
+) -join "`n"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$foundationSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Foundation batch failed; inspect the selected local schema before retrying.' }
 ```
 
-`setup.sql` creates `blood_donation_coordination` without `IF NOT EXISTS`, selects it, sets the current client session timezone to `+05:30`, then sources only the two completed migrations and reference seed. The MySQL client working directory must be `database/` so `SOURCE` paths resolve; connect without a selected database and start it with `--abort-source-on-error`. Existing schema names are refused by `CREATE DATABASE`, so this wrapper does not inspect a potentially privilege-filtered existing schema. Confirm setup with the disposable verifier before claiming verification.
+The direct batch creates only the foundation objects and reference rows. `apply-foundation.mjs` remains the guarded setup path and remains foundation-only. `setup.sql`, if used, is also foundation-only, creates `blood_donation_coordination` without `IF NOT EXISTS`, selects it, sets the client session timezone, then issues nested `SOURCE` commands. It is a convenience wrapper, not a fail-fast guarantee: a MySQL client may continue after a sourced-file error, so its completion does not prove all files succeeded. For guarded foundation setup, use `apply-foundation.mjs`; for a manual path, use the direct batch and check its exit code. Existing schema names are refused by `CREATE DATABASE`; inspect before any retry. Confirm setup with the disposable verifier before claiming verification.
 
 To exit MySQL, use `exit`. If the application `.env` is missing, configure its database host, port, user, password, and database name privately in `backend/.env` using an authorized application user. Preserve existing `.env` values and unrelated settings. Never paste secrets into tracked files, examples, shell arguments, reports, or chat. User-run foundation setup and connectivity results are summarized in the [implementation readiness review](../docs/implementation-readiness.md); this document does not store or display private settings.
 
 ## Disposable verification
 
-The verifier refuses to run unless its target database name matches `bddc_phase3_test_<label>`. Create a **new empty disposable schema** with that prefix, apply the same foundation setup there, then run from the repository root:
+The foundation verifier refuses to run unless its target database name matches `bddc_phase3_test_<label>`. Create a **new empty disposable schema** with that prefix, apply the foundation sequence there, then run from the repository root:
 
 ```powershell
 $previousDbHost = $env:DB_HOST
@@ -122,7 +145,142 @@ try {
 
 Repeat on a second newly created empty schema (for example `bddc_phase3_test_second`) and the same setup steps to verify reproducibility. If `backend/.env` is absent, explicitly set `DB_HOST` and `DB_PORT` as shown. The verifier overrides `DB_NAME` with the explicitly named disposable target; alternatively supply connection variables in the current process environment. If the app user is not authorized for the disposable schemas, provide a separate disposable-only identity through `PHASE3_TEST_DB_USER` and `PHASE3_TEST_DB_PASSWORD` process environment variables. The verifier requires read visibility for the inspected schema metadata plus DML on the disposable schema; insufficient visibility or SQL privileges fail the run. It does not need DDL. It prints safe negative-test labels and expected MySQL error codes only, never connection values or raw driver details. It inserts synthetic Account rows inside a transaction and rolls them back. It never seeds a permanent Account, creates/drops a database, drops a table, or changes a non-disposable schema. Do not point it at a project, shared, or production database.
 
+### Donor-only apply and disposable verification
+
+For a local database that already has the verified Account/BloodGroup foundation and reference rows, apply `003_donors.sql` exactly once, after confirming Donor is absent. User-run evidence dated 2026-10-20 records this application succeeding on `blood_donation_coordination`. Do not rerun `scripts/apply-foundation.mjs` on an initialized database: it remains foundation-only, expects an empty schema, and does not apply the Donor module. Do not add Donor or Hospital to `setup.sql` or the foundation runner.
+
+From the repository root, apply the canonical migration as a direct batch to the existing local foundation database, only after confirming `Donor` is absent. The schema setup identity needs `CREATE` on that schema and `REFERENCES` on the parent tables `Account` and `BloodGroup`; it does not need the runner's conservative global metadata-visibility grants merely to execute this migration.
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$donorSql = Get-Content -Raw -ErrorAction Stop .\database\migrations\003_donors.sql
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --database=blood_donation_coordination --skip-force --execute="$donorSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Donor migration failed; inspect the schema before retrying.' }
+```
+
+The migration uses plain `CREATE TABLE` and is intentionally not idempotent. Apply it only to an existing foundation where `Donor` is absent. If `Donor` already exists or a previous application stopped partway, inspect the schema and resolve it deliberately; do not rerun blindly or rebuild the development database.
+
+For a fresh disposable Donor verification schema, create a **new disposable** schema named `bddc_phase3_test_donor_<label>` with default charset/collation `utf8mb4` / `utf8mb4_0900_ai_ci`. Assemble a direct batch from canonical files in this exact order: `001_foundation.sql`, `002_auth.sql`, `reference_data.sql`, then `003_donors.sql`. Use `--skip-force --execute` and require a zero process exit code; never rely on interactive/nested `SOURCE` to stop after an error. Keep this verification schema separate from the existing development database.
+
+```powershell
+$donorTestSchema = 'bddc_phase3_test_donor_20261020_review'
+if ($donorTestSchema -notmatch '^bddc_phase3_test_donor_[a-z0-9_]+$') { throw 'Choose a valid donor disposable-schema name.' }
+$createTestSchemaSql = "CREATE DATABASE $donorTestSchema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$createTestSchemaSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Disposable schema creation failed; choose a new unused name and inspect before retrying.' }
+
+$donorTestSql = @(
+  "USE $donorTestSchema;"
+  "SET time_zone = '+05:30';"
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\001_foundation.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\002_auth.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\seeds\reference_data.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\003_donors.sql)
+) -join "`n"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$donorTestSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Disposable schema assembly failed; inspect that disposable schema before retrying.' }
+```
+
+Run `verify-donors.mjs` only against that explicitly selected loopback disposable schema. It requires SELECT, INSERT, UPDATE, and DELETE privileges scoped to that disposable schema; these test privileges are separate from both migration setup privileges and the routine application account. If `backend/.env` is absent, explicitly set `DB_HOST` and `DB_PORT` as in the earlier verifier example. The script uses `PHASE3_DONOR_TEST_DATABASE` for its required target name and the established temporary `PHASE3_TEST_DB_USER` / `PHASE3_TEST_DB_PASSWORD` overrides. Always clear temporary credentials in `finally`.
+
+The donor verifier checks the exact Donor metadata, indexes, and restrictive FKs; creates at least ten pairs using synthetic `PENDING` DONOR accounts and an intentionally unusable password-hash marker; exercises nulls, shared phone values, differing reported/confirmed groups, duplicate profiles, missing parents, restrictive deletes, and timestamp defaults/update behavior; then rolls back the whole transaction. These are disposable verifier fixtures, not usable login accounts or permanent shared seeds. It reports success only after rollback and connection cleanup succeed. On any verification or cleanup failure it exits nonzero and prints only a safe stage/label and sanitized code. The verifier never applies migrations, creates/drops schemas, prints connection settings, or targets the ordinary development database.
+
 The verifier checks the exact table/column order and types, NOT NULL, defaults, physical primary-key type/name/column, named unique/check constraints, case-sensitive role/status/group constraints, unique email/reference data, timestamps without automatic update behavior, InnoDB, the eight exact group IDs/codes/names, all nine role/status combinations, and negative cases. Each negative case must produce its expected MySQL code (`ER_DUP_ENTRY`, `ER_BAD_NULL_ERROR`, `ER_CHECK_CONSTRAINT_VIOLATED`, or `ER_NO_SUCH_TABLE`). A different code—including permission, connection, or syntax errors—or unexpected success fails verification. It reports safe case labels and MySQL error codes; raw driver details are suppressed.
+
+### DonationSlot, Booking, and EligibilityDecision apply and verification
+
+Migration `005_eligibility_booking.sql` creates only `DonationSlot`, `Booking`, and `EligibilityDecision`, in that dependency order. For an existing development schema, inspect it and confirm its Account, Donor, and BloodGroup prerequisites are present and the three target tables are absent; then apply **only 005**. Do not rerun the foundation runner. User-reported results described above record successful application and disposable verification; the commands below document the reviewed setup path.
+
+From the repository root, apply 005 as a direct batch and check the client exit code:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$eligibilityBookingSql = Get-Content -Raw -ErrorAction Stop .\database\migrations\005_eligibility_booking.sql
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --database=blood_donation_coordination --skip-force --execute="$eligibilityBookingSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Eligibility/booking migration failed; inspect the schema before retrying.' }
+```
+
+For a fresh loopback disposable schema, use a new name matching `bddc_phase3_test_booking_<label>`. Hospital migration 004 is not required. Read the canonical files with `-ErrorAction Stop` before invoking the client; assemble and execute them in this exact order: 001, 002, `reference_data.sql`, 003, then 005. The example creates a new disposable schema, applies the modules as one checked batch, and refuses to overwrite an existing schema:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$testSchema = 'bddc_phase3_test_booking_20261023_review'
+if ($testSchema -notmatch '^bddc_phase3_test_booking_[a-z0-9_]+$') { throw 'Choose a valid booking disposable-schema name.' }
+$moduleSql = @(
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\001_foundation.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\002_auth.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\seeds\reference_data.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\003_donors.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\005_eligibility_booking.sql)
+)
+$batchSql = @(
+  "CREATE DATABASE $testSchema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+  "USE $testSchema;"
+  "SET time_zone = '+05:30';"
+  $moduleSql
+) -join "`n"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$batchSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Disposable schema assembly failed; inspect that disposable schema before retrying.' }
+```
+
+Run `database/tests/verify-eligibility-booking.mjs` with `PHASE3_BOOKING_TEST_DATABASE` set to that exact schema name and the established temporary `PHASE3_TEST_DB_USER` / `PHASE3_TEST_DB_PASSWORD` values. Set `DB_HOST=127.0.0.1` and `DB_PORT=3306` explicitly if the private backend environment file is absent. Use a disposable-only identity with the required schema DML and metadata-read privileges; never use the verifier against the development database. Clear temporary credential environment variables in `finally` as in the existing verifier examples. The verifier inserts synthetic Account/Donor prerequisites and at least ten records in each of the three new tables in a rollback-only transaction. A pass checks storage constraints and safe expected SQL errors only; it does not verify concurrency, capacity races, overlapping bookings, authorization, eligibility calculations, or lifecycle workflows.
+
+The OPEN booking evaluation date, `REVIEW_REQUIRED` blocking, and indefinite-review semantics remain unresolved and do not block creation of these approved tables. Capacity occupancy, donor overlap, schedule edits, actor roles, current account state, eligibility evaluation, and lifecycle transitions remain future transactional/service enforcement; do not infer that the DDL or storage verifier implements them.
+
+### Donation apply and verification
+
+Migration `006_donations.sql` creates only `Donation` and depends on Account and Booking; the fresh sequence is 001, 002, `reference_data.sql`, 003, 005, then 006. Migration 004 Hospital is not required. For an existing development schema, inspect the target and confirm Account, Booking, and the other required dependencies exist and `Donation` is absent, then apply **only 006**. Do not rerun the foundation runner. User-run evidence reported 2026-10-24 records successful disposable verification and application to the development schema; this verifies Donation storage only.
+
+From the repository root, apply 006 to the inspected development schema as a direct batch and check the client exit code:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$donationSql = Get-Content -Raw -ErrorAction Stop .\database\migrations\006_donations.sql
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --database=blood_donation_coordination --skip-force --execute="$donationSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Donation migration failed; inspect the schema before retrying.' }
+```
+
+For a fresh loopback disposable schema, use a new name matching `bddc_phase3_test_donation_<label>`. Read every canonical SQL file successfully before invoking MySQL, then execute this exact order as one checked batch; 004 is omitted:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$donationTestSchema = 'bddc_phase3_test_donation_20261024_review'
+if ($donationTestSchema -notmatch '^bddc_phase3_test_donation_[a-z0-9_]+$') { throw 'Choose a valid Donation disposable-schema name.' }
+$modules = @(
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\001_foundation.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\002_auth.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\seeds\reference_data.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\003_donors.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\005_eligibility_booking.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\006_donations.sql)
+)
+$batchSql = @(
+  "CREATE DATABASE $donationTestSchema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+  "USE $donationTestSchema;"
+  "SET time_zone = '+05:30';"
+  $modules
+) -join "`n"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$batchSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Disposable schema assembly failed; inspect that disposable schema before retrying.' }
+```
+
+Run `database/tests/verify-donations.mjs` with `PHASE3_DONATION_TEST_DATABASE` set to the exact disposable name and the established temporary `PHASE3_TEST_DB_USER` / `PHASE3_TEST_DB_PASSWORD` overrides. Explicitly set `DB_HOST=127.0.0.1` and `DB_PORT=3306`; the verifier refuses non-loopback hosts and has no development-database default. The test identity needs schema-scoped SELECT, INSERT, and DELETE privileges plus sufficient `INFORMATION_SCHEMA` visibility to inspect the target metadata; it is separate from migration setup and routine application identities. Clear temporary credential variables in `finally`, restoring prior host/port values as in the existing examples.
+
+User-run evidence reported 2026-10-24: fresh disposable schema `bddc_phase3_test_donation_20261024_first` was assembled in order 001, 002, reference data, 003, 005, 006. `verify-donations.mjs` passed all 31 negative checks; ten synthetic Donation fixtures and their prerequisites rolled back successfully, and the connection closed. Development preflight found Account, BloodGroup, Donor, DonationSlot, Booking, and EligibilityDecision present with Donation absent; applying only `006_donations.sql` to `blood_donation_coordination` completed successfully. These are user-run results, not queries or actions performed by this documentation update.
+
+The verifier checks exact Donation columns, defaults, primary/unique keys, indexes, InnoDB/collation, named CHECK/FK constraints, referenced columns, FK ordinals, and restrictive actions. CHECK behavior is verified by permitted outcome/release pairs and negative SQL cases; no CHECK-expression text normalizer is used. Ten Donation fixtures and their synthetic Account, Donor, DonationSlot, and Booking prerequisites are inserted inside one transaction and rolled back. The synthetic accounts use an unusable hash marker and are disposable fixtures, not usable logins or permanent seeds. Success is printed only after rollback and connection cleanup both succeed. The checks do not implement or verify actor authorization, day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, or atomic/idempotent BloodUnit creation. Recording any Donation outcome creates no unit; approval/unit creation and its atomicity/idempotency require later service work after inventory and audit schema exist.
 
 ## Rerun and failure behavior
 
@@ -140,7 +298,7 @@ SQL migrations and reviewed seeds in Git are the shared schema source. Local-onl
 | 002 | `Account` | Thulasi (Authentication & Role Access); depends on foundation. |
 | 003 | `Donor` | Thulasi; depends on Account and BloodGroup. |
 | 004 | `Hospital` | Lathikaa; depends on Account. |
-| 005 | Eligibility, `DonationSlot`, `Booking` | Thulasi; depends on Donor/Account. |
+| 005 | `DonationSlot`, `Booking`, and `EligibilityDecision` | Thulasi; depends on Account, Donor, and BloodGroup reference data. 004 Hospital is not a dependency. |
 | 006 | `Donation` | Thulasi; depends on Booking and Account. |
 | 007 | `BloodUnit` and inventory lifecycle | Thulasi; depends on Donation and BloodGroup. |
 | 008 | `HospitalRequest` | Lathikaa; depends on Hospital, Account, and BloodGroup. |
@@ -150,7 +308,9 @@ SQL migrations and reviewed seeds in Git are the shared schema source. Local-onl
 
 The reserved filenames are a dependency plan, not a claim that those future files are implemented. If a shared object or dependency requires a numbering/order change, coordinate both owners and update the setup sequence before applying it. Foundation setup does not run placeholder files.
 
-Each developer applies reviewed SQL to their own local DB after syncing the merged PR from `origin/main`. Do not apply another developer's unfinished local branch changes or routinely share database instances. Setup/seed order follows dependencies; later account/profile fixtures depend on the associated profile tables. Audit/history infrastructure must accompany the first operations that require them, even if their screens are later. See [team workflow](../docs/team-workflow.md) for branches, PRs, and synchronization.
+Each developer applies reviewed SQL to their own local DB after syncing reviewed work. Do not apply another developer's unfinished local branch changes or routinely share database instances. Setup/seed order follows dependencies; later account/profile fixtures depend on the associated profile tables. Audit/history infrastructure must accompany the first operations that require them, even if their screens are later. See [team workflow](../docs/team-workflow.md) for branches, PRs, and synchronization.
+
+The explicitly coordinated pushed-checkpoint exchange documented in `team-workflow.md` is Git integration only. A Git merge does not execute SQL; each developer separately applies reviewed migrations to their own private local database after confirming the dependency order and target schema.
 
 ## Next dependencies for Lathikaa
 
