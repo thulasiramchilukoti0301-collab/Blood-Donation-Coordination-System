@@ -1,5 +1,9 @@
 # Database setup and collaboration
 
+## Hospital storage authored (verification pending)
+
+`004_hospitals.sql` and `tests/verify-hospitals.mjs` now implement the bounded Hospital storage artifacts. They have not been executed against MySQL by Codex. The user reports 001, 002, 003 and reference data already applied locally; do not rerun them on development. Confirm Hospital absence and Account compatibility through Workbench before separately authorized application of only 004. See [Hospital storage instructions and evidence](../docs/hospital-storage.md) for read-only preflight, disposable-only verification, and development before/after checks. Foundation setup below remains foundation-only.
+
 ## Current Phase 3 boundary
 
 The artifacts for the completed Account/BloodGroup foundation and Donor milestones, user-verified eligibility/booking, Donation storage, BloodUnit storage, and grouped read-only inventory view milestones are:
