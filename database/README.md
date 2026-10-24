@@ -2,7 +2,7 @@
 
 ## Current Phase 3 boundary
 
-The artifacts for the completed Account/BloodGroup foundation and Donor milestones, user-verified eligibility/booking and Donation storage milestones, and currently authorized BloodUnit storage milestone are:
+The artifacts for the completed Account/BloodGroup foundation and Donor milestones, user-verified eligibility/booking, Donation storage, BloodUnit storage, and grouped read-only inventory view milestones are:
 
 1. `migrations/001_foundation.sql` — `BloodGroup` only.
 2. `migrations/002_auth.sql` — `Account` only.
@@ -17,12 +17,13 @@ The artifacts for the completed Account/BloodGroup foundation and Donor mileston
 11. `tests/verify-donations.mjs` — metadata and rollback-only storage checks for Donation in a specifically named disposable schema; it does not verify donation workflows, atomic/idempotent BloodUnit creation, authorization, or concurrency.
 12. `migrations/007_inventory.sql` — creates only `BloodUnit`; depends on `Donation` and canonical `BloodGroup` rows, so the fresh order is 001, 002, reference data, 003, 005, 006, then 007. Migration 004 Hospital is not a dependency. User-run results reported 2026-10-24 verify this storage milestone.
 13. `tests/verify-inventory.mjs` — metadata and rollback-only storage checks for BloodUnit; user-run results reported 2026-10-24 passed all 16 negative checks. It does not verify inventory workflows or BloodUnit creation from approval.
+14. `views/available_inventory.sql` and `tests/verify-available-inventory.mjs` — define and verify the grouped read-only `v_available_inventory_by_group` view. User-run results reported 2026-10-24 verify this view milestone; details follow below. This is not an application API/report/screen verification.
 
 User-run evidence dated 2026-10-20 records that `bddc_phase3_test_donor_20261020_first` was assembled from 001, 002, `reference_data.sql`, then 003; `verify-donors.mjs` passed all 13 negative checks and confirmed rollback of ten synthetic Account/Donor pairs and connection cleanup. The same evidence records that development preflight found Account and BloodGroup with Donor absent, then applying only 003 to `blood_donation_coordination` succeeded. These are user-provided results, not queries or setup actions performed by this documentation update.
 
 Other reserved migration/seed placeholders remain non-executable content. Do not apply empty future modules. `BloodCompatibility`, its 64 directed pairs, and its administration remain Lathikaa's coordinated compatibility milestone. No Hospital profile or permanent Account fixture belongs in this milestone. Account/Donor role matching and atomic registration remain future transaction/service invariants; the foreign keys do not enforce them.
 
-This is not the complete Phase 3 database deliverable. User-reported results, reported 2026-10-24, verify the 005 eligibility/booking, 006 Donation, and 007 BloodUnit storage milestones only; the exact Donation and BloodUnit evidence and remaining limits are recorded under their respective sections below. Codex syntax checks are separate from user-run database results and did not query MySQL. Donation outcome recording creates no BloodUnit; approval and unit creation must eventually be atomic and idempotent after required audit infrastructure exists. The Donation and BloodUnit verifiers do not establish authorization, booking/day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, approval/unit-creation workflows, or inventory operations. Six logical entities, including five major tables, remain: Hospital, BloodCompatibility, HospitalRequest, RequestStatusHistory, Allocation, and AuditEvent. Other domain seeds, routines, view, history/audit infrastructure, expiry, permanent sample data, and concurrency verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; all verifier fixtures are rolled back and do not count as shared sample data.
+This is not the complete Phase 3 database deliverable. User-reported results, reported 2026-10-24, verify the 005 eligibility/booking, 006 Donation storage, 007 BloodUnit storage, and grouped inventory-view milestones only; details and remaining limits are recorded below. Codex syntax checks are separate from user-run database results and did not query MySQL. Donation outcome recording creates no BloodUnit; approval and unit creation must eventually be atomic and idempotent after required audit infrastructure exists. The Donation and BloodUnit verifiers do not establish authorization, booking/day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, approval/unit-creation workflows, or inventory operations. View verification does not establish application-account access, APIs, reports/screens, allocation, expiry transitions, audit writes, or concurrency. Six logical entities, including five major tables, remain: Hospital, BloodCompatibility, HospitalRequest, RequestStatusHistory, Allocation, and AuditEvent. Other domain seeds, routines, history/audit infrastructure, expiry, permanent sample data, and concurrency verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; all verifier fixtures are rolled back and do not count as shared sample data.
 
 ## Physical schema contract
 
@@ -336,6 +337,58 @@ User-run evidence reported 2026-10-24: `bddc_phase3_test_inventory_20261024_firs
 The verifier checks exact columns/defaults/collations, engine, keys, indexes, enforced CHECK metadata and behavior, FK columns/ordinals/actions, and specific negative SQL error codes. It inserts at least ten synthetic BloodUnit rows plus synthetic Account/Donor/slot/booking/approved Donation prerequisites in one transaction, then requires rollback and connection cleanup before success. These fixtures are disposable, are not usable login accounts, and do not count toward permanent ten-row sample-data targets.
 
 Migration 007 stores BloodUnit rows only. It does not create units from Donation approval or validate actor authorization, confirmed blood group, expiry against source collection date, shelf-life calculation, allocation, issue, discard/expiry workflows, transitions, concurrency, or audit writes. Approval and unit creation must eventually be atomic and idempotent once the required audit infrastructure exists. The candidate index has not been validated with `EXPLAIN`; defer the optional broad expiry-scan index until query evidence supports it.
+
+### Available inventory view
+
+`database/views/available_inventory.sql` contains only the plain `CREATE SQL SECURITY INVOKER VIEW v_available_inventory_by_group`. It exposes `blood_group_id`, `code`, `display_name`, and `available_unit_count`; each returned group has at least one unit whose status is `AVAILABLE`, whose `expiry_date` is strictly later than the MySQL session's `CURRENT_DATE()`, and whose source Donation is `COLLECTED` and `APPROVED`. It omits groups with zero qualifying units and makes no row-order promise. The caller supplies any `ORDER BY`. The view does not filter `BloodGroup.is_active` or `expired_at`, and it does not perform allocation or expiry transitions.
+
+User-run results reported 2026-10-24 verify the grouped read-only view milestone. Disposable schema `bddc_phase3_test_inventory_view_20261024_first` was assembled in order 001, 002, reference data, 003, 005, 006, 007, then `database/views/available_inventory.sql`. `verify-available-inventory.mjs` passed its 14 fixture cases, metadata checks, exact group counts, and date-boundary checks; fixtures were rolled back, the view was empty afterward, and the connection closed successfully. Development preflight found eight base tables and the view absent; applying only `database/views/available_inventory.sql` to `blood_donation_coordination` completed successfully. These are user-reported results, not MySQL actions performed by this documentation update. This verifies only the grouped read-only view. It does not verify application-account access, APIs, reports/screens, approval/unit creation, allocation, expiry transitions, audit writes, or concurrency.
+
+For any future local application, preflight the 001/002/reference-data/003/005/006/007 dependencies and confirm that the view name is absent. Apply only the view file once; do not reapply migrations or use the foundation runner:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$developmentSchema = Read-Host 'Preflighted local schema with inventory prerequisites and no view'
+$viewSql = Get-Content -Raw -ErrorAction Stop .\database\views\available_inventory.sql
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --database=$developmentSchema --skip-force --execute="$viewSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Available inventory view creation failed; inspect the schema before retrying.' }
+```
+
+For a fresh disposable schema, create a new loopback name matching `bddc_phase3_test_inventory_view_<label>`. The required dependency order is 001, 002, reference data, 003, 005, 006, 007, then `database/views/available_inventory.sql`; 004 Hospital is not required. This complete batch reads every canonical file before invoking MySQL, creates only the explicitly named disposable schema, and checks the client exit code:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local disposable-schema setup user'
+$viewTestSchema = 'bddc_phase3_test_inventory_view_review'
+if ($viewTestSchema -notmatch '^bddc_phase3_test_inventory_view_[a-z0-9_]+$') { throw 'Choose a valid inventory-view disposable-schema name.' }
+$modules = @(
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\001_foundation.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\002_auth.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\seeds\reference_data.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\003_donors.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\005_eligibility_booking.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\006_donations.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\007_inventory.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\views\available_inventory.sql)
+)
+$batchSql = @(
+  "CREATE DATABASE $viewTestSchema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+  "USE $viewTestSchema;"
+  "SET time_zone = '+05:30';"
+  $modules
+) -join "`n"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$batchSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Inventory-view disposable schema assembly failed; inspect that disposable schema before retrying.' }
+```
+
+Run the verifier with `PHASE3_INVENTORY_VIEW_TEST_DATABASE` set to that exact disposable schema, plus temporary `PHASE3_TEST_DB_USER` and `PHASE3_TEST_DB_PASSWORD` values. Set `DB_HOST=127.0.0.1` and `DB_PORT=3306` explicitly when needed; the verifier refuses non-loopback hosts and has no development-database default. It inspects an already-created view and never executes DDL. Before writes it requires all seven operational tables to be empty and the exact canonical eight BloodGroup rows; it refuses a populated target without deleting anything. Its synthetic Account/Donor/slot/booking/Donation/BloodUnit fixtures are transaction-only storage-level cases, not usable login accounts or permanent seeds. The verifier compares exact rows, including tomorrow as included and today/yesterday as excluded, and fails with a controlled diagnostic if the MySQL session date changes. Success requires rollback, an empty view result afterward, and successful connection closure.
+
+Keep privileges separate by purpose. The setup identity needs `CREATE VIEW` authorization and `SELECT` on the referenced tables to define the view. The verifier identity needs schema-scoped `SELECT`, `INSERT`, and `DELETE` for rollback-only fixture checks, `SHOW VIEW`, and sufficient metadata visibility to inspect view columns/security and prerequisite objects. The runtime identity is a separate application concern: because the view is `SQL SECURITY INVOKER`, the invoker must have applicable `SELECT` rights on the view and its underlying relations. These instructions do not change or broaden any grants.
+
+This read-only view does not require audit writes. Donation approval/unit creation, allocation, expiry updates/events, audit infrastructure, concurrency, authentication, APIs/UI, permanent sample data, and the other Phase 3 deliverables remain pending. The view adds no domain entity; six logical entities, including five major tables, remain.
 
 ## Rerun and failure behavior
 
