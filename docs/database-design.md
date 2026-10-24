@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-This document is the approved logical schema and implementation proposal for MySQL. Authored executable DDL covers BloodGroup and Account (`001_foundation.sql`, `002_auth.sql`), Donor (`003_donors.sql`), DonationSlot/Booking/EligibilityDecision (`005_eligibility_booking.sql`), and Donation (`006_donations.sql`); the reference seed is in `database/seeds/reference_data.sql`. Donor, 005, and 006 results are user-provided; results reported 2026-10-24 verify the 005 and Donation storage milestones only, as summarized in `database/README.md` and `implementation-readiness.md`. The other attributes below remain design requirements, not claims that the remaining tables are implemented. Proposed types assume MySQL 8.0.16+ so `CHECK` constraints are enforced; generated columns and InnoDB transactions are used for allocation integrity. Dates and local appointment timestamps use `Asia/Kolkata`; persisted `DATETIME` values are interpreted in that project timezone, with server and MySQL session timezone configured consistently.
+This document is the approved logical schema and implementation proposal for MySQL. Authored executable DDL covers BloodGroup and Account (`001_foundation.sql`, `002_auth.sql`), Donor (`003_donors.sql`), DonationSlot/Booking/EligibilityDecision (`005_eligibility_booking.sql`), Donation (`006_donations.sql`), and BloodUnit (`007_inventory.sql`); the reference seed is in `database/seeds/reference_data.sql`. Donor, 005, 006, and 007 results are user-provided; results reported 2026-10-24 verify the 005, Donation, and BloodUnit storage milestones only, as summarized in `database/README.md` and `implementation-readiness.md`. The six remaining logical entities are Hospital, BloodCompatibility, HospitalRequest, RequestStatusHistory, Allocation, and AuditEvent; five are major tables. The other attributes below remain design requirements, not claims that these remaining tables are implemented. Proposed types assume MySQL 8.0.16+ so `CHECK` constraints are enforced; generated columns and InnoDB transactions are used for allocation integrity. Dates and local appointment timestamps use `Asia/Kolkata`; persisted `DATETIME` values are interpreted in that project timezone, with server and MySQL session timezone configured consistently.
 
 ## Design decisions
 
@@ -178,12 +178,12 @@ Candidate key/PK: `donation_id`; alternate key: `booking_id`. One final release 
 | blood_group_id | BIGINT UNSIGNED NN | FK -> BloodGroup.blood_group_id |
 | expiry_date | DATE NN | calculated once on creation from donation's collection date and configured shelf life; transaction validates it is after source collection date |
 | unit_status | VARCHAR(12) NN | CK `AVAILABLE`, `ALLOCATED`, `ISSUED`, `EXPIRED`, `DISCARDED`; DF `AVAILABLE` |
-| discarded_at | DATETIME NULL | required iff status `DISCARDED` |
-| discard_reason_code | VARCHAR(40) NULL | required iff discarded |
-| expired_at | DATETIME NULL | set by expiry process |
+| discarded_at | DATETIME NULL | required iff status `DISCARDED`; row-local CHECK |
+| discard_reason_code | VARCHAR(40) NULL | required iff status `DISCARDED`; row-local CHECK |
+| expired_at | DATETIME NULL | set by a future expiry process; no `EXPIRED`-only row-local rule |
 | created_at | DATETIME NN | DF current timestamp |
 
-Candidate key/PK: `blood_unit_id`; alternate key: `donation_id`. Collection date is obtained through `BloodUnit -> Donation.collected_at`, rather than stored twice. The unit is assigned a staff-confirmed blood group at creation after donation approval. Only `AVAILABLE` units with future expiry and approved source donation may be allocated.
+Candidate key/PK: `blood_unit_id`; alternate key: `donation_id`. The authored 007 storage migration uses `PRIMARY` as the physical PK name, unique `donation_id`, restrictive FKs to Donation and BloodGroup, and the candidate index `(blood_group_id, unit_status, expiry_date, blood_unit_id)`. Collection date is obtained through `BloodUnit -> Donation.collected_at`, rather than stored twice. The unit is assigned a staff-confirmed blood group at creation after donation approval. Only `AVAILABLE` units with future expiry and approved source donation may be allocated; those cross-table and lifecycle rules are future transaction/service enforcement, not implemented by 007. No query-plan validation of the candidate index is claimed.
 
 ### HospitalRequest
 

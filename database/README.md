@@ -2,7 +2,7 @@
 
 ## Current Phase 3 boundary
 
-The completed Account/BloodGroup foundation and Donor milestone, the user-verified eligibility/booking storage milestone, and the currently authorized Donation storage milestone contain exactly:
+The artifacts for the completed Account/BloodGroup foundation and Donor milestones, user-verified eligibility/booking and Donation storage milestones, and currently authorized BloodUnit storage milestone are:
 
 1. `migrations/001_foundation.sql` — `BloodGroup` only.
 2. `migrations/002_auth.sql` — `Account` only.
@@ -15,16 +15,18 @@ The completed Account/BloodGroup foundation and Donor milestone, the user-verifi
 9. `tests/verify-eligibility-booking.mjs` — metadata and rollback-only storage checks for the three tables in a specifically named disposable schema. It does not verify concurrency or booking workflows.
 10. `migrations/006_donations.sql` — creates only `Donation`; depends on `Account` and `Booking` (therefore 001, 002, and 005); 004 Hospital is not a dependency.
 11. `tests/verify-donations.mjs` — metadata and rollback-only storage checks for Donation in a specifically named disposable schema; it does not verify donation workflows, atomic/idempotent BloodUnit creation, authorization, or concurrency.
+12. `migrations/007_inventory.sql` — creates only `BloodUnit`; depends on `Donation` and canonical `BloodGroup` rows, so the fresh order is 001, 002, reference data, 003, 005, 006, then 007. Migration 004 Hospital is not a dependency. User-run results reported 2026-10-24 verify this storage milestone.
+13. `tests/verify-inventory.mjs` — metadata and rollback-only storage checks for BloodUnit; user-run results reported 2026-10-24 passed all 16 negative checks. It does not verify inventory workflows or BloodUnit creation from approval.
 
 User-run evidence dated 2026-10-20 records that `bddc_phase3_test_donor_20261020_first` was assembled from 001, 002, `reference_data.sql`, then 003; `verify-donors.mjs` passed all 13 negative checks and confirmed rollback of ten synthetic Account/Donor pairs and connection cleanup. The same evidence records that development preflight found Account and BloodGroup with Donor absent, then applying only 003 to `blood_donation_coordination` succeeded. These are user-provided results, not queries or setup actions performed by this documentation update.
 
 Other reserved migration/seed placeholders remain non-executable content. Do not apply empty future modules. `BloodCompatibility`, its 64 directed pairs, and its administration remain Lathikaa's coordinated compatibility milestone. No Hospital profile or permanent Account fixture belongs in this milestone. Account/Donor role matching and atomic registration remain future transaction/service invariants; the foreign keys do not enforce them.
 
-This is not the complete Phase 3 database deliverable. User-reported results, reported 2026-10-24, verify 005 eligibility/booking storage and 006 Donation storage only; the exact Donation evidence and remaining limits are recorded under [Donation apply and verification](#donation-apply-and-verification). Codex syntax checks are separate from these user-run database results and did not query MySQL. Donation outcome recording creates no BloodUnit; atomic/idempotent unit creation after approval remains future service work after inventory/audit schema exists. The Donation verifier does not establish authorization, booking/day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, or donation workflows. The remaining seven logical entities, including six major tables, other domain modules/seeds, routines, view, history/audit infrastructure, expiry, sample data, and concurrency verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; all verifier fixtures are rolled back and do not count as shared sample data.
+This is not the complete Phase 3 database deliverable. User-reported results, reported 2026-10-24, verify the 005 eligibility/booking, 006 Donation, and 007 BloodUnit storage milestones only; the exact Donation and BloodUnit evidence and remaining limits are recorded under their respective sections below. Codex syntax checks are separate from user-run database results and did not query MySQL. Donation outcome recording creates no BloodUnit; approval and unit creation must eventually be atomic and idempotent after required audit infrastructure exists. The Donation and BloodUnit verifiers do not establish authorization, booking/day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, approval/unit-creation workflows, or inventory operations. Six logical entities, including five major tables, remain: Hospital, BloodCompatibility, HospitalRequest, RequestStatusHistory, Allocation, and AuditEvent. Other domain seeds, routines, view, history/audit infrastructure, expiry, permanent sample data, and concurrency verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; all verifier fixtures are rolled back and do not count as shared sample data.
 
 ## Physical schema contract
 
-The database default is `utf8mb4` / `utf8mb4_0900_ai_ci`; all seven tables defined by the current migrations use InnoDB. Case-insensitive `utf8mb4_0900_ai_ci` is used for email, display names, and Donor text fields. The app normalizes email to lowercase before storage; the unique index also treats differently cased email as a duplicate. Role/status and group code values use ASCII `ascii_bin` so their documented exact uppercase/literal values are case-sensitive. Times are `DATETIME` interpreted in `Asia/Kolkata`; set SQL/application sessions to `+05:30`. `updated_at` defaults at insert and is maintained explicitly by future application operations; no `ON UPDATE` clause or timestamp trigger is present.
+The database default is `utf8mb4` / `utf8mb4_0900_ai_ci`; the eight tables defined by non-empty migrations 001, 002, 003, 005, 006, and 007 use InnoDB. Case-insensitive `utf8mb4_0900_ai_ci` is used for email, display names, and Donor text fields. The app normalizes email to lowercase before storage; the unique index also treats differently cased email as a duplicate. Role/status and group code values use ASCII `ascii_bin` so their documented exact uppercase/literal values are case-sensitive. Times are `DATETIME` interpreted in `Asia/Kolkata`; set SQL/application sessions to `+05:30`. `updated_at` defaults at insert and is maintained explicitly by future application operations; no `ON UPDATE` clause or timestamp trigger is present.
 
 | Physical table | Columns and exact types | Constraints |
 |---|---|---|
@@ -282,6 +284,59 @@ User-run evidence reported 2026-10-24: fresh disposable schema `bddc_phase3_test
 
 The verifier checks exact Donation columns, defaults, primary/unique keys, indexes, InnoDB/collation, named CHECK/FK constraints, referenced columns, FK ordinals, and restrictive actions. CHECK behavior is verified by permitted outcome/release pairs and negative SQL cases; no CHECK-expression text normalizer is used. Ten Donation fixtures and their synthetic Account, Donor, DonationSlot, and Booking prerequisites are inserted inside one transaction and rolled back. The synthetic accounts use an unusable hash marker and are disposable fixtures, not usable logins or permanent seeds. Success is printed only after rollback and connection cleanup both succeed. The checks do not implement or verify actor authorization, day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, or atomic/idempotent BloodUnit creation. Recording any Donation outcome creates no unit; approval/unit creation and its atomicity/idempotency require later service work after inventory and audit schema exist.
 
+### BloodUnit apply and verification
+
+Migration `007_inventory.sql` creates only BloodUnit and depends on Donation plus the eight canonical BloodGroup reference rows. The fresh dependency order is 001, 002, `reference_data.sql`, 003, 005, 006, then 007; 004 Hospital is not required. User-run results reported 2026-10-24 verify 007 storage in the disposable schema and `blood_donation_coordination`. For any other developer database, preflight that Account, BloodGroup, Donor, DonationSlot, Booking, EligibilityDecision, and Donation exist and BloodUnit is absent; then apply **only 007**, once. Do not reapply 007 to the already verified `blood_donation_coordination` schema or rerun the foundation runner.
+
+Use the schema migration/setup identity, separately scoped from both the verifier identity and the runtime application identity. The migration identity must be authorized for the reviewed DDL in the selected schema; do not grant DDL privileges to the application account. The disposable verifier uses the established temporary test identity with only the required schema-scoped verification/data privileges and sufficient metadata visibility. Runtime application privileges will be specified during application preparation and are not established by these migration instructions.
+
+For a developer schema where preflight confirms BloodUnit is absent, apply only 007 from the repository root as a direct batch and check the client exit code. The current user-verified `blood_donation_coordination` schema already contains BloodUnit; do not execute this example against it again:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$developmentSchema = Read-Host 'Preflighted local schema where BloodUnit is absent'
+$inventorySql = Get-Content -Raw -ErrorAction Stop .\database\migrations\007_inventory.sql
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --database=$developmentSchema --skip-force --execute="$inventorySql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'BloodUnit migration failed; inspect the schema before retrying.' }
+```
+
+For a new loopback disposable schema, choose a unique name matching `bddc_phase3_test_inventory_<label>`. Read all canonical files successfully before invoking MySQL; then assemble in the listed order as one checked batch. This setup is separate from the disposable verifier and application account:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local schema setup user'
+$inventoryTestSchema = 'bddc_phase3_test_inventory_review'
+if ($inventoryTestSchema -notmatch '^bddc_phase3_test_inventory_[a-z0-9_]+$') { throw 'Choose a valid inventory disposable-schema name.' }
+$modules = @(
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\001_foundation.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\002_auth.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\seeds\reference_data.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\003_donors.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\005_eligibility_booking.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\006_donations.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\007_inventory.sql)
+)
+$batchSql = @(
+  "CREATE DATABASE $inventoryTestSchema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+  "USE $inventoryTestSchema;"
+  "SET time_zone = '+05:30';"
+  $modules
+) -join "`n"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$batchSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Disposable schema assembly failed; inspect that disposable schema before retrying.' }
+```
+
+Run `database/tests/verify-inventory.mjs` with `PHASE3_INVENTORY_TEST_DATABASE` set to the exact disposable schema and temporary `PHASE3_TEST_DB_USER` / `PHASE3_TEST_DB_PASSWORD` overrides. Explicitly set `DB_HOST=127.0.0.1` and `DB_PORT=3306`; the verifier has no development-database default and refuses non-loopback hosts. Its test identity requires schema-scoped SELECT/INSERT/DELETE and sufficient `INFORMATION_SCHEMA` visibility. Keep temporary test credentials separate from setup and runtime credentials and clear temporary environment values in `finally`.
+
+User-run evidence reported 2026-10-24: `bddc_phase3_test_inventory_20261024_first` was assembled in order 001, 002, reference data, 003, 005, 006, 007. `verify-inventory.mjs` passed all 16 negative checks; ten synthetic BloodUnit fixtures and their prerequisites rolled back successfully, and the connection closed. Development preflight found all seven prerequisites (Account, BloodGroup, Donor, DonationSlot, Booking, EligibilityDecision, Donation) present and BloodUnit absent; applying only `007_inventory.sql` to `blood_donation_coordination` succeeded. A subsequent read-only `SHOW CREATE TABLE` confirmed the expected BloodUnit columns, keys, foreign keys, CHECK constraints, and engine. An accidental second invocation failed authentication with `using password: NO` before SQL execution; it is not evidence of a successful migration-rerun guard. These are user-run results, not actions or queries performed by this documentation update.
+
+The verifier checks exact columns/defaults/collations, engine, keys, indexes, enforced CHECK metadata and behavior, FK columns/ordinals/actions, and specific negative SQL error codes. It inserts at least ten synthetic BloodUnit rows plus synthetic Account/Donor/slot/booking/approved Donation prerequisites in one transaction, then requires rollback and connection cleanup before success. These fixtures are disposable, are not usable login accounts, and do not count toward permanent ten-row sample-data targets.
+
+Migration 007 stores BloodUnit rows only. It does not create units from Donation approval or validate actor authorization, confirmed blood group, expiry against source collection date, shelf-life calculation, allocation, issue, discard/expiry workflows, transitions, concurrency, or audit writes. Approval and unit creation must eventually be atomic and idempotent once the required audit infrastructure exists. The candidate index has not been validated with `EXPLAIN`; defer the optional broad expiry-scan index until query evidence supports it.
+
 ## Rerun and failure behavior
 
 The migrations and seed intentionally use plain `CREATE TABLE` and `INSERT`, with no `IF NOT EXISTS`, `INSERT IGNORE`, upsert, or destructive cleanup. This makes schema drift and duplicate reference data visible. Before writes, the guarded runner requires an explicit empty-schema confirmation, directly verifiable global metadata-visibility grants, and zero tables/views, routines, triggers, and events. It fails clearly before writes if visibility cannot be established. Setup succeeds once. A complete rerun is rejected by the empty-schema guard before any SQL is applied; applying a migration directly also fails at the existing table. Existing rows are not overwritten or removed. If setup fails partway, stop and inspect the disposable schema; do not blindly rerun on a populated/project database or remove data to make it pass. For verification/reproduction, create a fresh disposable schema and apply the checked-in setup sequence again.
@@ -300,7 +355,7 @@ SQL migrations and reviewed seeds in Git are the shared schema source. Local-onl
 | 004 | `Hospital` | Lathikaa; depends on Account. |
 | 005 | `DonationSlot`, `Booking`, and `EligibilityDecision` | Thulasi; depends on Account, Donor, and BloodGroup reference data. 004 Hospital is not a dependency. |
 | 006 | `Donation` | Thulasi; depends on Booking and Account. |
-| 007 | `BloodUnit` and inventory lifecycle | Thulasi; depends on Donation and BloodGroup. |
+| 007 | `BloodUnit` storage only (user-run verified 2026-10-24) | Thulasi; depends on Donation and BloodGroup. Inventory lifecycle is later work. |
 | 008 | `HospitalRequest` | Lathikaa; depends on Hospital, Account, and BloodGroup. |
 | 009 | `BloodCompatibility` and `Allocation` | Lathikaa; depends on BloodGroup, BloodUnit, HospitalRequest. Includes the directed 64-pair matrix under the documented RBC model. |
 | 010 | `AuditEvent` and request-status history infrastructure | Coordinated with Lathikaa ownership; must exist before the first operations/routines that need audit/history rows. The audit screen can be implemented later. |
