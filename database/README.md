@@ -18,12 +18,14 @@ The artifacts for the completed Account/BloodGroup foundation and Donor mileston
 12. `migrations/007_inventory.sql` — creates only `BloodUnit`; depends on `Donation` and canonical `BloodGroup` rows, so the fresh order is 001, 002, reference data, 003, 005, 006, then 007. Migration 004 Hospital is not a dependency. User-run results reported 2026-10-24 verify this storage milestone.
 13. `tests/verify-inventory.mjs` — metadata and rollback-only storage checks for BloodUnit; user-run results reported 2026-10-24 passed all 16 negative checks. It does not verify inventory workflows or BloodUnit creation from approval.
 14. `views/available_inventory.sql` and `tests/verify-available-inventory.mjs` — define and verify the grouped read-only `v_available_inventory_by_group` view. User-run results reported 2026-10-24 verify this view milestone; details follow below. This is not an application API/report/screen verification.
+15. `queries/donor_inventory.sql` — seven named parameterized read-only SELECT demonstrations for Thulasi's donor/donation/inventory modules; user-run disposable verification passed on 2026-10-24.
+16. `tests/verify-donor-inventory-queries.mjs` — extracts and runs those canonical query sections against a specifically named disposable schema using rollback-only fixtures; user-run verification passed on 2026-10-24.
 
 User-run evidence dated 2026-10-20 records that `bddc_phase3_test_donor_20261020_first` was assembled from 001, 002, `reference_data.sql`, then 003; `verify-donors.mjs` passed all 13 negative checks and confirmed rollback of ten synthetic Account/Donor pairs and connection cleanup. The same evidence records that development preflight found Account and BloodGroup with Donor absent, then applying only 003 to `blood_donation_coordination` succeeded. These are user-provided results, not queries or setup actions performed by this documentation update.
 
 Other reserved migration/seed placeholders remain non-executable content. Do not apply empty future modules. `BloodCompatibility`, its 64 directed pairs, and its administration remain Lathikaa's coordinated compatibility milestone. No Hospital profile or permanent Account fixture belongs in this milestone. Account/Donor role matching and atomic registration remain future transaction/service invariants; the foreign keys do not enforce them.
 
-This is not the complete Phase 3 database deliverable. User-reported results, reported 2026-10-24, verify the 005 eligibility/booking, 006 Donation storage, 007 BloodUnit storage, and grouped inventory-view milestones only; details and remaining limits are recorded below. Codex syntax checks are separate from user-run database results and did not query MySQL. Donation outcome recording creates no BloodUnit; approval and unit creation must eventually be atomic and idempotent after required audit infrastructure exists. The Donation and BloodUnit verifiers do not establish authorization, booking/day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, approval/unit-creation workflows, or inventory operations. View verification does not establish application-account access, APIs, reports/screens, allocation, expiry transitions, audit writes, or concurrency. Six logical entities, including five major tables, remain: Hospital, BloodCompatibility, HospitalRequest, RequestStatusHistory, Allocation, and AuditEvent. Other domain seeds, routines, history/audit infrastructure, expiry, permanent sample data, and concurrency verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; all verifier fixtures are rolled back and do not count as shared sample data.
+This is not the complete Phase 3 database deliverable. User-reported results, reported 2026-10-24, verify the 005 eligibility/booking, 006 Donation storage, 007 BloodUnit storage, grouped inventory-view, and donor/inventory SQL demonstration milestones only; details and remaining limits are recorded below. Codex syntax checks and database-free probes are separate from user-run database results and did not query MySQL. Donation outcome recording creates no BloodUnit; approval and unit creation must eventually be atomic and idempotent after required audit infrastructure exists. The Donation and BloodUnit verifiers do not establish authorization, booking/day-of eligibility, lifecycle transitions, timestamp policy, corrections, concurrency, approval/unit-creation workflows, or inventory operations. View/query verification does not establish application-account access, API/report/screen behavior, authentication, allocation, expiry transitions, audit writes, or concurrency. Six logical entities, including five major tables, remain: Hospital, BloodCompatibility, HospitalRequest, RequestStatusHistory, Allocation, and AuditEvent. Other domain seeds, routines, history/audit infrastructure, expiry, permanent sample data, and concurrency verification remain for later explicitly authorized work. The eventual requirement is at least ten coherent rows in each of the 12 major tables; all verifier fixtures are rolled back and do not count as shared sample data.
 
 ## Physical schema contract
 
@@ -389,6 +391,55 @@ Run the verifier with `PHASE3_INVENTORY_VIEW_TEST_DATABASE` set to that exact di
 Keep privileges separate by purpose. The setup identity needs `CREATE VIEW` authorization and `SELECT` on the referenced tables to define the view. The verifier identity needs schema-scoped `SELECT`, `INSERT`, and `DELETE` for rollback-only fixture checks, `SHOW VIEW`, and sufficient metadata visibility to inspect view columns/security and prerequisite objects. The runtime identity is a separate application concern: because the view is `SQL SECURITY INVOKER`, the invoker must have applicable `SELECT` rights on the view and its underlying relations. These instructions do not change or broaden any grants.
 
 This read-only view does not require audit writes. Donation approval/unit creation, allocation, expiry updates/events, audit infrastructure, concurrency, authentication, APIs/UI, permanent sample data, and the other Phase 3 deliverables remain pending. The view adds no domain entity; six logical entities, including five major tables, remain.
+
+### Donor and inventory SQL-query demonstrations
+
+`database/queries/donor_inventory.sql` contains seven uniquely marked, parameterized read-only SELECT templates. It is not a migration and must not be applied wholesale as a setup batch. Each marker is `-- query: <name>` and is followed by query-specific parameter order, returned columns, null-filter behavior, and ordering/date semantics. The verifier reads these sections directly, rejects missing/duplicate/unexpected query names, checks placeholder counts, and executes the extracted statements through `mysql2`; it does not duplicate their SQL and performs no DDL.
+
+| Query | Parameters and behavior |
+|---|---|
+| `donor-donation-history` | Donor account ID; optional inclusive lower and exclusive upper `collected_at` DATETIME bounds. With a bound, rows having NULL `collected_at` are excluded. Returns only safe donor name and booking/slot/donation history fields, ordered newest collection first with donation ID tie-break. |
+| `blood-unit-traceability` | BloodUnit ID. Returns group, unit state/expiry, source donation/booking/donor IDs, collection time, and release status; missing IDs return no rows. No credentials, contact fields, or detailed medical data. |
+| `donation-search` | Optional donor account ID, outcome, lower `collected_at` DATETIME, upper `collected_at` DATETIME. Each optional argument is bound twice (NULL or the filter value). DATETIME range is lower-inclusive/upper-exclusive; bounded searches exclude NULL collection times. One row per Donation, newest collection first with ID tie-break. |
+| `inventory-search` | Optional blood group ID, unit status, lower expiry DATE, upper expiry DATE. Each optional argument is bound twice. Both DATE bounds are inclusive; all stored unit statuses remain eligible for this general search. Ordered by expiry, group, then unit ID. |
+| `donation-outcome-counts` | Optional lower-inclusive/upper-exclusive collection DATETIME bounds, each bound parameter is bound twice. Groups exact outcome codes; when either bound is supplied, NULL collection times are excluded. |
+| `inventory-status-counts` | No parameters. Counts by blood group and exact unit status; zero-row groups are absent. |
+| `approved-collection-to-release-duration` | No parameters. Counts COLLECTED/APPROVED donations with both timestamps and averages elapsed seconds divided by 3600.0. Empty input yields count zero and NULL average. |
+
+Together these statements demonstrate multi-table joins, traceability across normalized records, parameterized optional filtering, inclusive/exclusive temporal ranges, `COUNT`/`GROUP BY`, and fractional-hour `AVG`. They are educational query demonstrations for Thulasi's donor/donation/inventory modules, not Lathikaa's report APIs or dashboards. Executing SELECT statements does not provide application-level authorization: future request ownership must be derived from the authenticated server session, with role and resource checks enforced by the API. These queries do not implement authentication, authorization, UI, workflow mutations, allocation, or concurrency.
+
+The query verifier requires an explicitly selected loopback schema named `bddc_phase3_test_donor_inventory_queries_<label>` through `PHASE3_DONOR_INVENTORY_QUERY_TEST_DATABASE`; it has no development-database default. Fresh disposable assembly is exactly 001, 002, reference data, 003, 005, 006, 007. It does not depend on Hospital migration 004 or the availability view. This PowerShell example reads every file successfully before invoking MySQL and applies only that dependency sequence to a new schema; `CREATE DATABASE` fails if the name already exists:
+
+```powershell
+$mysqlExe = (Get-Command mysql.exe -ErrorAction Stop).Source
+$schemaUser = Read-Host 'Local disposable-schema setup user'
+$queryTestSchema = 'bddc_phase3_test_donor_inventory_queries_review'
+if ($queryTestSchema -notmatch '^bddc_phase3_test_donor_inventory_queries_[a-z0-9_]+$') { throw 'Choose a valid donor/inventory-query disposable-schema name.' }
+$modules = @(
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\001_foundation.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\002_auth.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\seeds\reference_data.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\003_donors.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\005_eligibility_booking.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\006_donations.sql)
+  (Get-Content -Raw -ErrorAction Stop .\database\migrations\007_inventory.sql)
+)
+$batchSql = @(
+  "CREATE DATABASE $queryTestSchema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+  "USE $queryTestSchema;"
+  "SET time_zone = '+05:30';"
+  $modules
+) -join "`n"
+& $mysqlExe --host=127.0.0.1 --port=3306 --user=$schemaUser --password --skip-force --execute="$batchSql"
+$mysqlExitCode = $LASTEXITCODE
+if ($mysqlExitCode -ne 0) { throw 'Donor/inventory query schema assembly failed; inspect that disposable schema before retrying.' }
+```
+
+The verifier requires empty operational tables and the canonical eight BloodGroup rows, inserts synthetic prerequisites and fixtures in one transaction, and requires rollback, post-rollback empty-table checks, and connection closure before success. Its synthetic accounts are not usable logins or permanent sample data.
+
+Run `database/tests/verify-donor-inventory-queries.mjs` with `PHASE3_DONOR_INVENTORY_QUERY_TEST_DATABASE` set to the exact disposable schema and temporary `PHASE3_TEST_DB_USER` / `PHASE3_TEST_DB_PASSWORD` overrides. Set `DB_HOST=127.0.0.1` and `DB_PORT=3306` explicitly when needed. The verifier session uses `+05:30`. Use a disposable-only account with the required schema `SELECT` and `INSERT` privileges; rollback cleans up fixture writes without issuing DELETE. Setup and verifier identities remain separate, and no grants are changed by these instructions.
+
+User-run results reported 2026-10-24: disposable schema `bddc_phase3_test_donor_inventory_queries_20261024_first` was assembled from 001, 002, reference data, 003, 005, 006, and 007. `verify-donor-inventory-queries.mjs` passed all seven canonical queries and their fixture assertions, covering donor isolation, traceability, optional filters, ordering, date boundaries, grouped counts, fractional-hour averages, and empty results. Synthetic fixtures were rolled back, post-rollback empty-state checks passed, and the connection closed successfully. This verifies only these SQL demonstrations and their disposable-fixture checks. It does not verify application authorization, APIs, reports/screens, authentication, workflow mutations, or concurrency. These are user-provided database results; this documentation update did not connect to MySQL.
 
 ## Rerun and failure behavior
 

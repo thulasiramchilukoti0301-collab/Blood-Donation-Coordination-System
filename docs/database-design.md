@@ -309,6 +309,8 @@ Request status changes use the dedicated FK-backed RequestStatusHistory, not gen
 
 The logical design phase itself produced no SQL. For the bounded Phase 3 SQL currently authorized, see `database/README.md`; the remaining Phase 3 implementation and SQL evidence should include:
 
+`database/queries/donor_inventory.sql` contains seven parameterized, read-only SELECT templates for Thulasi's donor/donation/inventory modules; it is not a migration and must not be applied wholesale as a setup batch. They cover donor donation history and safe BloodUnit traceability joins, optional donor/donation/inventory searches, outcome and group/status counts, and fractional-hour average release duration. User-run results reported 2026-10-24 verify all seven canonical queries and disposable fixture assertions; details are in `database/README.md`. These examples do not add API contracts, report screens, application-level access control, or workflow behavior; ownership must later be derived from authenticated server sessions.
+
 - **Create:** insert a booking/request; update lifecycle via controlled status operations.
 - **Read/search:** donor by group/area/status; slots by open status/date; units by group/status/expiry; requests by status/priority/date and Hospital.
 - **Update:** approve account; record donation release decision; cancel booking; mark unit discarded. Demonstrate valid transitions.
