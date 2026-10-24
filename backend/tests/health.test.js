@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { createApp } from '../src/app.js';
+import { createAuthRuntime } from '../src/modules/auth/router.js';
 import { environment, readDatabaseConfig } from '../src/config/environment.js';
 import { verifyDatabaseConnection, closeDatabasePool } from '../src/config/database.js';
 import { HttpError } from '../src/utils/httpError.js';
@@ -8,9 +9,10 @@ import { HttpError } from '../src/utils/httpError.js';
 let server;
 let baseUrl;
 let checkDatabase;
+const unavailableAuthRuntime = createAuthRuntime({ databasePool: null, env: {} });
 
 before(async () => {
-  server = createApp({ verifyDatabase: () => checkDatabase() }).listen(0, '127.0.0.1');
+  server = createApp({ verifyDatabase: () => checkDatabase(), authRuntime: unavailableAuthRuntime }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   baseUrl = `http://127.0.0.1:${server.address().port}`;
 });
@@ -61,13 +63,16 @@ test('database driver failures return 503 without leaking secrets', async () => 
 });
 
 test('unknown and unimplemented business routes return JSON 404', async () => {
-  for (const path of ['/api/unknown', '/api/auth/me', '/api/inventory']) {
+  for (const path of ['/api/unknown', '/api/inventory']) {
     const response = await fetch(`${baseUrl}${path}`);
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), {
       success: false, error: { code: 'NOT_FOUND', message: 'API route not found.' },
     });
   }
+  const authUnavailable = await fetch(`${baseUrl}/api/auth/me`);
+  assert.equal(authUnavailable.status, 503);
+  assert.equal((await authUnavailable.json()).error.code, 'AUTHENTICATION_NOT_CONFIGURED');
 });
 
 test('malformed JSON is handled centrally without echoing the payload', async () => {
@@ -113,27 +118,32 @@ test('CORS preflight supports health requests with credentials', async () => {
 test('database probe executes SELECT 1 and releases its connection', async () => {
   let releases = 0;
   let statement;
+  let result = 1;
   const connection = {
-    query: async (query) => { statement = query; return [[{ connected: 1 }]]; },
+    query: async (query) => { statement = query; return [[{ connected: result }]]; },
     release: () => { releases += 1; },
   };
   assert.equal(await verifyDatabaseConnection({ getConnection: async () => connection }), true);
+  result = '1';
+  assert.equal(await verifyDatabaseConnection({ getConnection: async () => connection }), true);
   assert.equal(statement.sql, 'SELECT 1 AS connected');
   assert.equal(statement.timeout, 5000);
-  assert.equal(releases, 1);
+  assert.equal(releases, 2);
 
   connection.query = async () => { throw new Error('private-test-secret'); };
   await assert.rejects(verifyDatabaseConnection({ getConnection: async () => connection }),
     (error) => error instanceof HttpError && error.status === 503 && error.code === 'DATABASE_UNAVAILABLE');
-  assert.equal(releases, 2);
+  assert.equal(releases, 3);
 });
 
 test('a non-successful SELECT result cannot be reported as connected', async () => {
-  let released = false;
-  await assert.rejects(verifyDatabaseConnection({ getConnection: async () => ({
-    query: async () => [[{ connected: 0 }]], release: () => { released = true; },
-  }) }), (error) => error.code === 'DATABASE_UNAVAILABLE');
-  assert.equal(released, true);
+  for (const rows of [[{ connected: 0 }], [{ connected: '0' }], [{ connected: true }], [{}], []]) {
+    let released = false;
+    await assert.rejects(verifyDatabaseConnection({ getConnection: async () => ({
+      query: async () => [rows], release: () => { released = true; },
+    }) }), (error) => error instanceof HttpError && error.status === 503 && error.code === 'DATABASE_UNAVAILABLE');
+    assert.equal(released, true);
+  }
 });
 
 test('database configuration has no implicit credentials and validates the port', () => {
@@ -145,4 +155,6 @@ test('database configuration has no implicit credentials and validates the port'
   assert.equal(options.multipleStatements, false);
   assert.equal(options.waitForConnections, false);
   assert.equal(options.timezone, '+05:30');
+  assert.equal(options.supportBigNumbers, true);
+  assert.equal(options.bigNumberStrings, true);
 });

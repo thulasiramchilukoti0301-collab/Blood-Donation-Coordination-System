@@ -56,3 +56,88 @@ h3 { margin: 0; font-size: 17px; font-weight: 650; }
   h2 { font-size: 21px; }
   .site-footer { flex-direction: column; gap: 3px; }
 }
+
+/* Rose Quartz Focus is selected only for the Login, Donor Profile, and
+   account-status surfaces implemented in this bounded feature. */
+.rose-app-shell {
+  --rose-bg: #FFF6F7;
+  --rose-surface: #FFFFFF;
+  --rose-alt: #FDEDEF;
+  --rose-border: #F6DCE0;
+  --rose-accent: #E66A82;
+  --rose-action: #AA394F;
+  --rose-action-hover: #9B3049;
+  --rose-tint: #FBE0E5;
+  --rose-sage: #3F7F5E;
+  --rose-sage-tint: #E4F2EA;
+  --rose-text: #3A2A30;
+  --rose-muted: #725B63;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--rose-text);
+  background: var(--rose-bg);
+  font-family: Karla, "Segoe UI", Arial, sans-serif;
+}
+.rose-header { width: 100%; background: var(--rose-bg); border-bottom: 1px solid var(--rose-border); }
+.rose-header-inner, .rose-footer-inner { width: 100%; max-width: 1200px; margin: 0 auto; padding-right: clamp(20px, 4vw, 40px); padding-left: clamp(20px, 4vw, 40px); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.rose-header-inner { padding-top: 22px; padding-bottom: 22px; }
+.rose-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--rose-text); font-size: 14px; line-height: 1.25; font-weight: 700; text-decoration: none; }
+.rose-brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 13px; background: var(--rose-tint); color: var(--rose-action); font-size: 27px; line-height: 1; }
+.rose-nav { display: flex; align-items: center; gap: 18px; }
+.rose-nav a, .rose-link-button, .rose-action-link, .text-button { color: var(--rose-action); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.rose-link-button, .text-button { background: transparent; border: 0; padding: 7px 0; cursor: pointer; }
+.rose-main { flex: 1; width: 100%; max-width: 760px; margin: 0 auto; padding: 42px 20px 56px; }
+.rose-main-wide { max-width: 1200px; padding-right: clamp(20px, 4vw, 40px); padding-left: clamp(20px, 4vw, 40px); }
+.auth-intro { margin: 0 0 24px; }
+.rose-eyebrow { margin: 0 0 10px; color: var(--rose-muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; }
+.auth-intro h1 { margin: 0 0 12px; color: var(--rose-text); font-family: "DM Serif Display", Georgia, serif; font-size: clamp(34px, 5vw, 46px); font-weight: 400; line-height: 1.08; letter-spacing: -.5px; }
+.auth-intro > p:last-child { max-width: 620px; margin: 0; color: var(--rose-muted); font-size: 16px; }
+.rose-card { padding: 30px; border: 1px solid var(--rose-border); border-radius: 18px; background: var(--rose-surface); box-shadow: 0 8px 28px #3A2A3009; }
+.rose-card h2 { margin: 0 0 22px; color: var(--rose-text); font-family: "DM Serif Display", Georgia, serif; font-size: 27px; font-weight: 400; }
+.auth-card { width: 100%; max-width: 640px; margin-right: auto; margin-left: auto; }
+.auth-card form { display: grid; gap: 8px; }
+.auth-card label { margin-top: 9px; color: var(--rose-text); font-size: 14px; font-weight: 700; }
+.auth-card input, .auth-card textarea { width: 100%; min-height: 45px; padding: 10px 12px; border: 1px solid #EDC4CB; border-radius: 9px; color: var(--rose-text); background: #fff; font: inherit; font-size: 15px; }
+.auth-card textarea { resize: vertical; }
+.auth-card input:focus-visible, .auth-card textarea:focus-visible { outline: 3px solid #E66A8270; outline-offset: 2px; border-color: var(--rose-action); }
+.rose-app-shell button:focus-visible, .rose-app-shell a:focus-visible { outline: 3px solid #C0485A; outline-offset: 3px; }
+.rose-primary-button { min-height: 48px; margin-top: 14px; border: 1px solid var(--rose-action); border-radius: 10px; color: #fff; background: var(--rose-action); font-weight: 800; }
+.rose-primary-button:hover:enabled { background: var(--rose-action-hover); }
+.rose-primary-button:disabled { opacity: .7; cursor: wait; }
+.rose-secondary-button { border-color: var(--rose-border); color: var(--rose-action); }
+.field-error { color: #C0485A; font-size: 13px; }
+.field-note, .password-hint { margin: 3px 0 0; color: var(--rose-muted); font-size: 13px; }
+.optional-label { color: var(--rose-muted); font-size: 12px; font-weight: 500; }
+.notice { border-radius: 11px; padding: 13px 15px; font-size: 14px; }
+.notice-success { border: 1px solid #8DBFA8; color: #315F48; background: var(--rose-sage-tint); }
+.notice-error { border: 1px solid #EDC4CB; color: #9F3D50; background: #FDE8EA; }
+.notice-pending { display: grid; gap: 4px; border: 1px solid #F2B84B; color: #6E5110; background: #FFF1D6; }
+.auth-switch { margin-top: 20px; color: var(--rose-muted); font-size: 14px; }
+.text-button { font: inherit; }
+.auth-footnote { margin: 18px 0 0; color: var(--rose-muted); font-size: 12px; }
+.auth-footnote a { color: var(--rose-action); }
+.profile-card { margin-top: 12px; }
+.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 24px 0; }
+.profile-detail { padding: 15px 0; border-bottom: 1px solid #F6DCE0; overflow-wrap: anywhere; }
+.profile-detail dt { color: var(--rose-muted); font-size: 12px; font-weight: 700; }
+.profile-detail dd { margin: 5px 0 0; color: var(--rose-text); font-size: 15px; overflow-wrap: anywhere; }
+.status-card > p:last-child { color: var(--rose-muted); }
+.status-role { margin-top: 0; color: var(--rose-muted); }
+.account-status { display: inline-block; border-radius: 30px; padding: 6px 12px; font-size: 12px; font-weight: 800; letter-spacing: .4px; }
+.status-pending { color: #6E5110; background: #FFF1D6; }
+.status-active { color: #315F48; background: var(--rose-sage-tint); }
+.rose-footer { width: 100%; background: var(--rose-bg); border-top: 1px solid var(--rose-border); color: #7E656D; font-size: 11px; }
+.rose-footer-inner { padding-top: 20px; padding-bottom: 20px; }
+@media (max-width: 660px) {
+  .rose-header-inner { align-items: flex-start; flex-direction: column; }
+  .rose-nav { flex-wrap: wrap; gap: 14px; }
+  .rose-main { padding-top: 32px; padding-bottom: 42px; }
+  .rose-card { padding: 22px; }
+  .profile-grid { grid-template-columns: 1fr; }
+  .rose-footer-inner { align-items: flex-start; flex-direction: column; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rose-app-shell *, .rose-app-shell *::before, .rose-app-shell *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

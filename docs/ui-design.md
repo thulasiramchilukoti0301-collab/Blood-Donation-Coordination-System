@@ -1,6 +1,6 @@
 # UI Design Themes
 
-This document records three available visual theme options for the Blood Donation Coordination System. These options are documented, not selected. Theme assignment remains OPEN for every screen in `ui-screen-map.md`; the user will choose each page's theme later. Recommendations may favor Mint Gauge for quantities/status, Sky Pipeline for processes, and Rose Quartz Focus for focused forms/actions, but those recommendations are not assignments.
+This document records three available visual theme options for the Blood Donation Coordination System. Theme assignment remains OPEN for every unimplemented screen in `ui-screen-map.md`; the user chooses each later page's theme. Rose Quartz Focus has been selected only for the implemented Login/registration, shared access/error, read-only Donor Profile, and account-status surfaces. Recommendations may favor Mint Gauge for quantities/status and Sky Pipeline for processes, but those recommendations are not assignments.
 
 ## Mint Gauge
 
@@ -113,6 +113,8 @@ Values below are illustrative specifications for a selected theme, not page assi
 | Mint Gauge | Page title 28–30 px; section title 20 px; card title 16 px; gauge numbers 20–24 px; body 13–14 px; captions 12 px. Sora number figures are tabular. | Ring first-load animation 600 ms ease-out; card hover lift 2 px; drawer 200 ms; status crossfade and quantity-ring fill. Rounded chart bars with `borderRadius` 8, faint y-grid, donut cutout 78%. Use strong button/link `#1E8A71` for small white text rather than relying on `#2FA58A`. |
 | Sky Pipeline | Page title 28 px; stage numbers 40 px; card title 16 px; body 13–14 px; captions 12 px. | Count-up stage numbers; one chevron pulse when a count changes; track marker transition 250 ms; slight dock-icon hover lift; confirmation check. Rounded chart bars and faint blue grids; yellow tint is reserved for attention. Use strong button/link `#2F78D6`. |
 | Rose Quartz Focus | Page title 42 px; key card numbers 52 px; brand 20 px; body 13–14 px; captions 12 px. Use `#7E656D` for small muted text; `#A58A92` is decorative/muted. | Cards fade/rise 8 px with 60 ms stagger; gentle hover with darker border; tooltip fade; chip crossfade; sage confirmation feedback. Rounded charts, light grids, serif chart titles, cream-center donuts. Emergency uses `#C0485A` plus a label, distinct from rose actions. |
+
+For the implemented Rose Quartz surfaces, contrast-safe action and muted text variants are used (`#AA394F` actions, `#725B63` body-muted text); the supplied palette values above remain the design reference. Status meaning is still shown with text and is not conveyed by color alone.
 
 Mint top pill tabs, Sky floating bottom dock, and Rose right icon rail are optional examples from the source reference, not three navigation prescriptions. Keep the same shared navigation placement and behavior across every theme. The final common navigation layout remains undecided.
 

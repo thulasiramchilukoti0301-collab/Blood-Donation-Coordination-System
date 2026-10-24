@@ -44,9 +44,34 @@ export function readDatabaseConfig(env = process.env) {
         connectTimeout: 5000,
         enableKeepAlive: true,
         multipleStatements: false,
+        supportBigNumbers: true,
+        bigNumberStrings: true,
       },
     };
   } catch {
     return { options: null, issue: 'DATABASE_NOT_CONFIGURED' };
+  }
+}
+
+export function readSessionConfig(env = process.env) {
+  const secret = env.SESSION_SECRET;
+  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) {
+    return { options: null, issue: 'SESSION_SECRET_NOT_CONFIGURED' };
+  }
+  try {
+    const ttlMinutes = Number(env.SESSION_TTL_MINUTES ?? 120);
+    if (!Number.isInteger(ttlMinutes) || ttlMinutes < 5 || ttlMinutes > 1440) {
+      return { options: null, issue: 'SESSION_CONFIGURATION_INVALID' };
+    }
+    return {
+      issue: null,
+      options: {
+        secret,
+        ttlMilliseconds: ttlMinutes * 60_000,
+        cookieSecure: env.NODE_ENV === 'production',
+      },
+    };
+  } catch {
+    return { options: null, issue: 'SESSION_CONFIGURATION_INVALID' };
   }
 }
