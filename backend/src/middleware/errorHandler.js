@@ -19,5 +19,7 @@ export function errorHandler(error, req, res, next) {
     message = 'Request body is too large.';
   }
 
-  res.status(status).json({ success: false, error: { code, message } });
+  const errorBody = { code, message };
+  if (error instanceof HttpError && error.fields) errorBody.fields = error.fields;
+  res.status(status).json({ success: false, error: errorBody });
 }

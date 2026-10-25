@@ -9,8 +9,9 @@ Canonical API/database state and decision codes are uppercase. Human-readable la
 1. Donor submits name, date of birth, contact details, address/area, ABO/Rh blood group (if known), and credentials. Server validates required fields and unique login identifiers.
 2. New donor account is `PENDING` until staff approves it. The donor may complete/edit their own profile; staff may correct/approve it. A donor cannot approve their own account or edit another donor.
 3. PENDING Donor/Hospital users may authenticate only to see approval status, access/update permitted own-profile fields, change their password, and log out. They cannot book or perform other operational actions. SUSPENDED accounts cannot establish sessions; suspension revokes existing sessions and every protected request checks current account state. Reactivation is an audited staff action and requires fresh login; revoked sessions remain invalid.
-4. Staff confirmation/testing is authoritative for the blood group used for inventory. A donor-provided or self-reported group is not sufficient to establish an allocatable unit's group.
-5. Donation history is derived from donation records and visible to that donor and authorized staff. Donors cannot create or edit completed donation records.
+4. The shared registration and future password-change policy requires at least 8 Unicode code points and no more than 72 UTF-8 bytes, one Unicode number and one punctuation/symbol character, with control characters rejected. Spaces are preserved and do not satisfy the symbol requirement. No upper/lowercase combination is required. Passwords are never trimmed, normalized, truncated, logged, or echoed; bcrypt work factor is 12. Password changes also require current-password verification and invalidate every session; password change is not implemented in the current bounded feature.
+5. Staff confirmation/testing is authoritative for the blood group used for inventory. A donor-provided or self-reported group is not sufficient to establish an allocatable unit's group.
+6. Donation history is derived from donation records and visible to that donor and authorized staff. Donors cannot create or edit completed donation records.
 
 ### Eligibility
 

@@ -3,6 +3,11 @@ import { Route, Routes } from 'react-router-dom';
 import ConnectionStatus from './components/ConnectionStatus';
 import FoundationLayout from './layouts/FoundationLayout';
 import { checkHealth } from './services/health';
+import { AuthProvider } from './features/auth/AuthProvider';
+import AuthLayout from './features/auth/AuthLayout';
+import LoginPage from './features/auth/LoginPage';
+import DonorProfilePage from './features/donors/DonorProfilePage';
+import AccountStatusPage from './features/auth/AccountStatusPage';
 
 const checking = { state: 'checking', message: 'Waiting for a health-check response…' };
 
@@ -60,9 +65,16 @@ function FoundationHome() {
 }
 
 function NotFound() {
-  return <FoundationLayout><section className="intro"><h1>Page not found</h1><p>Only the foundation page is available in this phase.</p><a href="/">Return to the foundation page</a></section></FoundationLayout>;
+  return <AuthLayout><section className="auth-intro"><p className="rose-eyebrow">Not found</p><h1>We couldn’t find that page</h1><p>The address may be incorrect or the page may not be available yet.</p><a className="rose-action-link" href="/">Return to the project home</a></section></AuthLayout>;
 }
 
 export default function App() {
-  return <Routes><Route path="/" element={<FoundationHome />} /><Route path="*" element={<NotFound />} /></Routes>;
+  return <AuthProvider><Routes>
+    <Route path="/" element={<FoundationHome />} />
+    <Route path="/login" element={<LoginPage />} />
+    <Route path="/donor/profile" element={<DonorProfilePage />} />
+    <Route path="/account/status" element={<AccountStatusPage />} />
+    <Route path="/unauthorized" element={<AuthLayout><section className="auth-intro"><p className="rose-eyebrow">Access denied</p><h1>This account cannot open this page</h1><p>Use the account navigation to view the pages available for your role.</p><a className="rose-action-link" href="/account/status">View account status</a></section></AuthLayout>} />
+    <Route path="*" element={<NotFound />} />
+  </Routes></AuthProvider>;
 }

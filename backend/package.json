@@ -14,6 +14,7 @@
     "check:db": "node src/utils/checkDatabase.js"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.6",
     "express": "^5.2.1",

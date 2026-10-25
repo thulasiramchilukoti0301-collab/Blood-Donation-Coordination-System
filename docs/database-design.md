@@ -8,7 +8,7 @@ This document is the approved logical schema and implementation proposal for MyS
 
 - Fourteen domain entities are selected below. Eligibility decisions and request status history are separate history entities. Testing/release fields live on Donation because the simplified workflow records one final release decision per donation. Expiry runs are audit events, not a separate entity.
 - Account is the single authentication identity, with exactly one role and one matching Donor or Hospital profile for those roles; Admin has neither profile. PENDING Donor/Hospital accounts may use limited account/profile operations; operational actions require ACTIVE status. SUSPENDED accounts cannot establish sessions and existing sessions are revoked on suspension.
-- Account stores bcrypt hash, not credentials in a profile. Server-side session data is outside this domain schema (a future session store may be infrastructure storage).
+- Account stores bcrypt hash, not credentials in a profile. Server-side session data is outside this domain schema; the separately authored `database/infrastructure/auth_sessions.sql` table is application infrastructure and does not change the 14-entity design.
 - Blood group and directed donor-to-recipient compatibility are normalized reference data; store all 64 donor/recipient pairs and a true/false compatibility value for each.
 - Donation always references a booking (walk-ins are out of scope). One approved collected donation creates at most one BloodUnit.
 - Request status history is distinct from general audit because it is a typed, FK-backed sequence of request status changes. The request-creation transaction inserts the initial status event; one `AFTER UPDATE` trigger records later status changes only. The application must not also insert those update events.
@@ -308,6 +308,8 @@ Request status changes use the dedicated FK-backed RequestStatusHistory, not gen
 ## CRUD and query/report examples planned
 
 The logical design phase itself produced no SQL. For the bounded Phase 3 SQL currently authorized, see `database/README.md`; the remaining Phase 3 implementation and SQL evidence should include:
+
+`database/queries/donor_inventory.sql` contains seven parameterized, read-only SELECT templates for Thulasi's donor/donation/inventory modules; it is not a migration and must not be applied wholesale as a setup batch. They cover donor donation history and safe BloodUnit traceability joins, optional donor/donation/inventory searches, outcome and group/status counts, and fractional-hour average release duration. User-run results reported 2026-10-24 verify all seven canonical queries and disposable fixture assertions; details are in `database/README.md`. These examples do not add API contracts, report screens, application-level access control, or workflow behavior; ownership must later be derived from authenticated server sessions.
 
 - **Create:** insert a booking/request; update lifecycle via controlled status operations.
 - **Read/search:** donor by group/area/status; slots by open status/date; units by group/status/expiry; requests by status/priority/date and Hospital.

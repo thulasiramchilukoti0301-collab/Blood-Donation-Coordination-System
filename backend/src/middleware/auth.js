@@ -1,3 +1,48 @@
-// Reserved for the separately authorized authentication phase.
-// No middleware is exported: importing a fake allow-all guard must fail.
-// Future implementation must validate server-side sessions and account state.
+import { HttpError } from '../utils/httpError.js';
+
+function destroySession(req) {
+  return new Promise((resolve, reject) => {
+    if (!req.session) return resolve();
+    req.session.destroy((error) => error
+      ? reject(new HttpError(503, 'SESSION_STORAGE_UNAVAILABLE', 'Session storage is unavailable.'))
+      : resolve());
+  });
+}
+
+export function requireCurrentAccount(authService) {
+  return async function currentAccountGuard(req, res, next) {
+    const claimed = req.session?.auth;
+    if (!claimed || typeof claimed.accountId !== 'string' || !/^\d+$/u.test(claimed.accountId)) {
+      return next(new HttpError(401, 'AUTHENTICATION_REQUIRED', 'Sign in to continue.'));
+    }
+    try {
+      const account = await authService.currentAccount(claimed.accountId);
+      const statusPermitted = account?.accountStatus === 'ACTIVE'
+        || (account?.accountStatus === 'PENDING' && ['DONOR', 'HOSPITAL'].includes(account.role));
+      if (!account || account.role !== claimed.role || !statusPermitted) {
+        await destroySession(req);
+        return next(new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session. Sign in again if the account is active.'));
+      }
+      req.authAccount = account;
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  };
+}
+
+export function requireRole(...allowedRoles) {
+  return function roleGuard(req, res, next) {
+    if (!req.authAccount || !allowedRoles.includes(req.authAccount.role)) {
+      return next(new HttpError(403, 'FORBIDDEN', 'You do not have access to this resource.'));
+    }
+    return next();
+  };
+}
+
+export function requireActiveAccount(req, res, next) {
+  if (!req.authAccount || req.authAccount.accountStatus !== 'ACTIVE') {
+    return next(new HttpError(403, 'ACTIVE_ACCOUNT_REQUIRED', 'An active account is required for this operation.'));
+  }
+  return next();
+}

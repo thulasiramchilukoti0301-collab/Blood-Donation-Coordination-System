@@ -41,9 +41,9 @@ React client  -- HTTP/JSON -->  Express API  -- mysql2 -->  MySQL
 
 ## Security and integrity
 
-- Authentication uses bcrypt password hashes and server-side sessions with an opaque secure cookie, as selected in Phase 1. Never return or log passwords, password hashes, session identifiers, or secrets.
+- Authentication uses bcrypt password hashes and MySQL-backed server-side sessions with an opaque secure cookie. The bounded Donor feature uses bcrypt work factor 12 and the shared policy defined in `requirements.md`. Session-table DDL is separate infrastructure at `database/infrastructure/auth_sessions.sql`; the runtime never creates it automatically. Never return or log passwords, password hashes, session identifiers, or secrets.
 - Use server-side role, current account-status, and ownership checks on every protected request; CSRF protection applies to cookie-authenticated state changes, with secure cookie settings appropriate to the deployment. PENDING Donor/Hospital sessions are restricted to approval status, permitted own-profile reads/updates, password change, and logout. SUSPENDED accounts cannot log in; suspension revokes existing sessions, and reactivation requires an audited staff action and fresh login.
-- Password change verifies the current password, validates server-side using the registration password policy, stores only a bcrypt hash, audits without password material, revokes all account sessions including the current one, and requires a new login. The policy itself remains to be agreed because registration requirements are not yet documented.
+- Future password change must verify the current password, validate server-side using the registration password policy, store only a bcrypt hash, audit without password material, revoke all account sessions including the current one, and require a new login. Password change is not part of the bounded feature; the policy is defined in `requirements.md`.
 - Validate and normalize input on the server and use parameterized SQL.
 - Keep credentials outside source control; retain audit history without sensitive medical details.
 - Implement audit writes and request-status history alongside the first operations that require them; the audit-log screen can be implemented later.
@@ -53,5 +53,5 @@ React client  -- HTTP/JSON -->  Express API  -- mysql2 -->  MySQL
 
 - Confirm the target MySQL version, Event Scheduler availability/privileges, generated-column behavior, and transaction/trigger behavior.
 - Author physical DDL/DML, exact index plans, and sample-data distribution in Phase 3.
-- Finalize session-store selection and local frontend/API CSRF/CORS settings during application foundation.
+- The initial session store and local frontend/API CSRF/CORS settings are implemented; deployment-specific multi-process rate-limit storage and reverse-proxy cookie configuration remain later decisions.
 - Finalize pagination, validation/error envelopes, and chart layouts during implementation; the documented route set and initial report metrics remain the baseline.
