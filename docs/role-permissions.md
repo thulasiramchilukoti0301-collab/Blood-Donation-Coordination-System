@@ -6,7 +6,7 @@ The bounded authentication work implements public Donor/Hospital registration, l
 
 - Default deny: each endpoint requires authentication and an explicit role/ownership check.
 - A Hospital can see only its own profile and requests. A Donor can see only their own profile, bookings, and donation history. Admin / Blood Bank Staff can access operational records needed to run the bank.
-- Public registration never creates an Admin account. Admin provisioning is out-of-band/manual for this project.
+- Public registration never creates an Admin account. The bounded [first-Admin CLI](first-admin-bootstrap.md) implements manual/out-of-band creation of one new ACTIVE Admin on an explicitly selected loopback development database; successful first-Admin creation and the basic Admin Hospital read/session flow have separate USER-RUN evidence with browser confirmation reported 2026-10-26. It refuses any existing Admin regardless of status, never promotes or resets an Account, and does not implement applicant approval.
 - Every protected request checks the current account status, role, and resource ownership; a session cookie alone does not preserve access after status changes.
 - PENDING Donor/Hospital accounts may authenticate only to view approval status, read/update permitted fields on their own profile, change their password, and log out. They cannot book, request blood, or perform other operational actions.
 - SUSPENDED accounts cannot establish a session. Suspension revokes existing sessions. Reactivation requires an audited staff action and a fresh login; a revoked session is never restored.

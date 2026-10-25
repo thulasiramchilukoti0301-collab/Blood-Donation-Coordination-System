@@ -4,6 +4,8 @@ This document is the API contract baseline. The bounded authentication/Donor wor
 
 ## Authentication and accounts
 
+The [manual first-Admin CLI](first-admin-bootstrap.md) is an out-of-band local utility, not an API endpoint or public registration path. It creates one new ADMIN/ACTIVE Account only when no Admin exists; it neither changes an existing Account nor implements the shared approval/status routes below. USER-RUN evidence with browser confirmation reported 2026-10-26 records successful first-Admin creation and the basic authenticated Admin Hospital read flow; the guide separates this evidence from the earlier automated tests and lists the remaining live boundaries.
+
 | Route | Method | Role | Purpose | Major request fields | Major response fields |
 |---|---|---|---|---|---|
 | `/api/auth/csrf` | GET | Public or authenticated | **Implemented subset.** Create or return a session-bound CSRF token for the trusted web client; response is `no-store`. | none | csrfToken (CSRF token only; no session identifier) |

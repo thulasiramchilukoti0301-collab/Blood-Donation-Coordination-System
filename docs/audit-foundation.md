@@ -188,7 +188,7 @@ The user reported the following results from **Thulasi's environment**, using th
 - **Development installation and structure:** preflight found Account as InnoDB and AuditEvent absent. Only `database/migrations/010_audit.sql` was then applied to `blood_donation_coordination`. `SHOW CREATE TABLE` and `SHOW INDEX` matched the approved nine columns, primary key, restrictive actor FK, two CHECKs and two composite indexes.
 - **Application-account read access:** the configured application account passed AuditEvent SELECT access. Existing database-level SELECT/INSERT/UPDATE/DELETE grants were observed. No grants were changed and no application audit-write test was performed.
 
-This verifies the corrected normal-mode disposable verifier and the stated local storage setup/read access only. **Dedicated-server mode was not live-reverified here.** Account approval, production action/reason mappings, transactional session revocation, Admin provisioning, audit APIs/UI and concurrency remain pending. Rolled-back fixtures are not permanent sample data.
+This verifies the corrected normal-mode disposable verifier and the stated local storage setup/read access only. **Dedicated-server mode was not live-reverified here.** At this 2026-10-25 AuditEvent setup checkpoint, Account approval, production action/reason mappings, transactional session revocation, Admin provisioning, audit APIs/UI and concurrency remained pending. Later first-Admin/basic browser evidence is separate from this audit setup evidence. Rolled-back fixtures are not permanent sample data.
 
 Lathikaa retains Audit feature ownership; Thulasi retains Account/authentication/approval ownership. This local installation is not evidence of a change to Lathikaa's database. The continuing personal branches, reviewed pushed-checkpoint exchange and deferred main merge remain as documented in [team workflow](team-workflow.md); PR #5 remains cumulative and open.
 
@@ -198,12 +198,14 @@ Lathikaa retains Audit feature ownership; Thulasi retains Account/authentication
 |---|---|
 | SOURCE COMPLETE | Approved DDL/indexes, internal writer, parameterized insertion and validation/error boundaries; database-free visibility correction and regressions are integrated. Historical MySQL evidence applies to the incoming tested revision |
 | LOCAL SETUP USER-VERIFIED | Thulasi's 2026-10-25 evidence records application of only 010, matching structure/indexes and application-account SELECT access; no application audit-write test was performed |
-| OPEN / OUT OF SCOPE | Production Account action registry/reason mapping, shared approval/transactional session-revocation integration, Admin provisioning, audit APIs/UI, concurrency and the separately coordinated request-history migration |
+| OPEN / OUT OF SCOPE | Production Account action registry/reason mapping, shared approval/transactional session-revocation integration, audit APIs/UI, concurrency and the separately coordinated request-history migration |
 | NORMAL MODE USER-VERIFIED / DEDICATED MODE PENDING | The corrected verifier at `15ac4cf` passed the normal-mode disposable run reported above; corrected dedicated-server mode was not live-reverified |
 
 The published AuditEvent checkpoint is `5b7f45acf38bba3e583b245939b2959c88efcf12`, based on Hospital checkpoint `4cd32bf659068ccd360dc05e77427caadac37e3b`. Its integration on `thulasiram` preserves both developers' Hospital evidence and the existing Donor contact/reported-group features. Lathikaa retains Audit feature ownership; this is the authorized shared verifier correction, not an Account approval implementation.
 
 The new `backend/tests/audit-verifier-preflight.test.js` executes the actual standalone verifier in isolated subprocesses. A test-only loader replaces its mysql2 acquisition dependency, and a preloaded socket guard blocks outbound connections. The ten cases cover missing/incomplete visibility in both modes, sufficient named/ALL privileges advancing through preflight in both modes, and dedicated datadir/port mismatches rejecting. The successful-preflight cases deliberately stop before fixtures; they are not SQL/storage verification. Every case asserts zero fixture writes, zero transaction starts, no outbound connection attempt and connection closure. Final integration check results are recorded separately in `implementation-readiness.md`.
+
+Separate [USER-RUN first-Admin/basic browser evidence, with browser confirmation reported 2026-10-26](first-admin-bootstrap.md#user-run-evidence-browser-confirmation-reported-2026-10-26), now records manual provisioning and the basic Admin Hospital read flow. It does not verify any Account approval or application audit-write integration.
 
 ## Thulasi integration dependency
 

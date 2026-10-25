@@ -62,6 +62,12 @@ function optionalUnsignedId(value) {
   }
 }
 
+export function validateAccountEmail(value) {
+  const email = text({ email: value }, 'email', 254).toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) fail({ email: 'Enter a valid email address.' });
+  return email;
+}
+
 export function validateDonorRegistration(body, now = new Date()) {
   objectBody(body);
   rejectUnknownFields(body, new Set([
@@ -69,8 +75,7 @@ export function validateDonorRegistration(body, now = new Date()) {
   ]));
 
   const fullName = text(body, 'fullName', 120);
-  const email = text(body, 'email', 254).toLowerCase();
-  if (!EMAIL_PATTERN.test(email)) fail({ email: 'Enter a valid email address.' });
+  const email = validateAccountEmail(body.email);
 
   const password = body.password;
   const policyResult = validatePassword(password);
@@ -123,8 +128,7 @@ export function validateHospitalRegistration(body) {
   rejectUnknownFields(body, new Set([
     'email', 'password', 'organizationName', 'registrationNumber', 'contactName', 'phone', 'address',
   ]));
-  const email = text(body, 'email', 254).toLowerCase();
-  if (!EMAIL_PATTERN.test(email)) fail({ email: 'Enter a valid email address.' });
+  const email = validateAccountEmail(body.email);
   const password = body.password;
   if (!validatePassword(password).valid) {
     fail({ password: 'Use at least 8 characters, including a number and a punctuation or symbol character; maximum 72 UTF-8 bytes.' });
