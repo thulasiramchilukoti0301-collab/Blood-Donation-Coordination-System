@@ -149,6 +149,8 @@ Represent compatibility relationally in `BloodGroup` and `BloodCompatibility`, w
 
 ## 7. Audit events
 
+The [bounded Account approval backend](account-approval-backend.md) now implements only PENDING -> ACTIVE for DONOR/HOSPITAL with ACCOUNT_APPROVED, reason REGISTRATION_REVIEWED, fixed `PENDING -> ACTIVE` summary and a server UUID. It atomically revokes old sessions and requires fresh login. Other state actions/mappings remain deferred; this is not donor eligibility or blood-group confirmation.
+
 Audit at least: account approval/suspension/reactivation; donor profile corrections by staff; eligibility/deferral decisions; booking create/cancel/no-show correction; donation recording and testing/release decisions; unit creation, discard, expiry, allocation, deallocation, and issue; blood-group/compatibility reference changes; hospital request create, priority/status, rejection/cancellation; authentication failures only as counts/actor/time if desired (never credentials). Request quantity is immutable after submission. Role changes are not an approved application operation; if a role-changing workflow is later approved, specify and audit it separately.
 
 Each event should capture actor, action, entity type/id, timestamp, and concise before/after state or safe change summary; include reason where a staff override is permitted. Never store passwords, password hashes in audit payload, JWT/session tokens, secrets, detailed medical answers, or unnecessary sensitive information.

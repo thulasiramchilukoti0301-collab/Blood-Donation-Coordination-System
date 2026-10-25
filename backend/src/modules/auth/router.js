@@ -4,6 +4,9 @@ import { createAuthRepository } from './repository.js';
 import { createAuthService } from './service.js';
 import { createDonorRepository } from '../donors/repository.js';
 import { createDonorProfileService } from '../donors/service.js';
+import { createAccountAdminRepository } from '../accounts/repository.js';
+import { createAccountAdminService } from '../accounts/service.js';
+import { createAccountAdminRouter } from '../accounts/router.js';
 import { validateDonorRegistration, validateHospitalRegistration, validateLogin } from './validation.js';
 import { requireCurrentAccount, requireRole } from '../../middleware/auth.js';
 import { requireTrustedOriginAndCsrf } from '../../middleware/csrf.js';
@@ -20,6 +23,8 @@ function unavailableRouter() {
   const router = express.Router();
   router.use((req, res, next) => {
     const supported = (req.method === 'GET' && ['/auth/csrf', '/auth/me', '/donors/me'].includes(req.path))
+      || (req.method === 'GET' && req.path === '/admin/accounts')
+      || (req.method === 'PATCH' && /^\/admin\/accounts\/[^/]+$/u.test(req.path))
       || (req.method === 'PATCH' && req.path === '/donors/me')
       || (req.method === 'POST' && ['/auth/register/donors', '/auth/register/hospitals', '/auth/login', '/auth/logout'].includes(req.path));
     if (!supported) return next();
@@ -32,7 +37,7 @@ function unavailableRouter() {
   return router;
 }
 
-export function createAuthRouter({ authService, donorService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
+export function createAuthRouter({ authService, donorService, accountService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
   const router = express.Router();
   const csrf = requireTrustedOriginAndCsrf(frontendUrl);
   const loginLimiter = createRateLimiter();
@@ -67,20 +72,32 @@ export function createAuthRouter({ authService, donorService, sessionStore, fron
   });
 
   router.post('/auth/login', loginLimiter, csrf, async (req, res, next) => {
+    let persisting = false;
     try {
       const credentials = validateLogin(req.body);
-      const account = await authService.authenticate(credentials.email, credentials.password);
-      await callbackPromise(req.session, 'regenerate');
-      req.session.auth = { accountId: account.accountId, role: account.role };
-      req.session.csrfToken = randomBytes(32).toString('hex');
-      await callbackPromise(req.session, 'save');
+      const account = await authService.establishSession(credentials.email, credentials.password, async (principal, connection) => {
+        persisting = true;
+        await sessionStore.withLoginTransaction(connection, principal, async () => {
+          await callbackPromise(req.session, 'regenerate');
+          req.session.auth = { ...principal };
+          req.session.csrfToken = randomBytes(32).toString('hex');
+          await callbackPromise(req.session, 'save');
+        });
+      });
       res.set('Cache-Control', 'no-store');
       res.json({ success: true, user: account });
     } catch (error) {
-      if (error?.code === 'SESSION_STORAGE_UNAVAILABLE') return next(error);
+      if (persisting) {
+        // Prevent Express's response-time save from authenticating a failed or
+        // uncertain login. unset:destroy tombstones this SID outside the failed TX.
+        req.session = null;
+        res.clearCookie('bdcs.sid', { httpOnly: true, secure: cookieSecure, sameSite: 'lax', path: '/' });
+      }
       next(error);
     }
   });
+
+  if (accountService) router.use(createAccountAdminRouter({ authService, accountService, frontendUrl }));
 
   router.get('/auth/me', currentAccount, (req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -131,9 +148,10 @@ export function createAuthRuntime({ databasePool = pool, env = process.env, fron
   const repository = createAuthRepository(databasePool);
   const authService = createAuthService({ repository });
   const donorService = createDonorProfileService({ repository: createDonorRepository(databasePool) });
+  const accountService = createAccountAdminService({ repository: createAccountAdminRepository(databasePool), sessionStore });
   return {
     middleware: persistentSessions.middleware,
-    router: createAuthRouter({ authService, donorService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
+    router: createAuthRouter({ authService, donorService, accountService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
     sessionStore,
   };
 }

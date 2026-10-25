@@ -293,7 +293,7 @@ test('Admin donor PATCH is forbidden while unrelated Admin/Hospital mutations, r
   }), 403, 'FORBIDDEN');
   for (const [method, path] of [
     ['POST', '/auth/register/admins'],
-    ['PATCH', '/admin/hospitals/12'], ['GET', '/admin/accounts'], ['PATCH', '/admin/accounts/12'],
+    ['PATCH', '/admin/hospitals/12'],
     ['GET', '/hospitals/me/requests'], ['POST', '/hospitals/me/requests'],
     ['GET', '/hospitals/me/reports/requests'],
     ['POST', '/hospitals/me'], ['DELETE', '/hospitals/me'],

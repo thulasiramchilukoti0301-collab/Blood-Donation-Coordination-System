@@ -200,7 +200,12 @@ async function start({ role = 'DONOR', status = 'PENDING', donorService } = {}) 
     donorProfile: async () => saved,
     authenticate: async () => ({ accountId, role, accountStatus: currentStatus }),
   };
+  authService.establishSession = async (email, password, persist) => {
+    const account = await authService.authenticate(email, password);
+    await persist(account, {}); return account;
+  };
   const store = new session.MemoryStore();
+  store.withLoginTransaction = async (_connection, _account, work) => work();
   const runtime = {
     middleware: session({
       name: 'bdcs.sid', secret: 'test-only-secret-with-at-least-32-bytes', store,

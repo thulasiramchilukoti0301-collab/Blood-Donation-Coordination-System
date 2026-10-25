@@ -4,6 +4,10 @@
 
 This document turns the approved project scope into requirements for the college mini-project. The system is an educational workflow simulator, not a clinical decision system or a production blood service. Donor eligibility and blood release must ultimately follow locally applicable rules and qualified staff decisions.
 
+## Current bounded Account implementation
+
+The [shared Account backend](account-approval-backend.md) now implements ACTIVE ADMIN queue and controlled DONOR/HOSPITAL PENDING -> ACTIVE approval, with atomic status/audit/session tombstones and revalidated login persistence. Only the approval action/reason mapping is resolved. Separate USER-RUN Console approval/audit/fresh-login evidence dated 2026-10-26 is recorded in that guide; further live concurrency/failure/security and all-session/multi-device checks remain pending. Frontend approval controls, suspension/reactivation, password change and other deferred features remain unimplemented. The broader requirements below do not imply those features are implemented.
+
 ## Product requirements
 
 | ID | Requirement |
