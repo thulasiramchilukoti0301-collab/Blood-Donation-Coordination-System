@@ -90,6 +90,28 @@ export function validateDonorRegistration(body, now = new Date()) {
   return { fullName, email, password, dateOfBirth, phone, address, area, reportedBloodGroupId };
 }
 
+export function validateDonorProfilePatch(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+    || ![Object.prototype, null].includes(Object.getPrototypeOf(body))) {
+    fail({ body: 'Enter profile changes to save.' });
+  }
+  const allowed = new Set(['fullName', 'phone', 'address', 'area']);
+  rejectUnknownFields(body, allowed);
+  const fields = Object.keys(body);
+  if (!fields.length) fail({ body: 'Enter profile changes to save.' });
+  return Object.fromEntries(fields.map((field) => {
+    if (typeof body[field] === 'string' && /\p{Cc}/u.test(body[field])) {
+      fail({ [field]: 'Control characters are not allowed.' });
+    }
+    return [
+      field, field === 'area' && body.area === null
+        ? null
+        : text(body, field, { fullName: 120, phone: 30, address: 255, area: 100 }[field],
+          { optional: field === 'area' }),
+    ];
+  }));
+}
+
 export function validateLogin(body) {
   objectBody(body);
   rejectUnknownFields(body, new Set(['email', 'password']));

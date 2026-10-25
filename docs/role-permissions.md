@@ -1,6 +1,6 @@
 # Role Permissions
 
-The bounded authentication/Donor feature now implements public Donor registration, login/logout, current-account status, and read-only Donor self-profile access. The remaining permission matrix describes the approved broader application; only implemented routes listed in `api-design.md` are available in this milestone. Profile editing, account approval/suspension, password change, and operational actions remain unimplemented.
+The bounded authentication/Donor work implements public Donor registration, login/logout, current-account status, Donor self-profile read, and the subsequent bounded self-profile edit of full name, phone, address, and area. The remaining permission matrix describes the approved broader application; only implemented routes listed in `api-design.md` are available. Staff corrections, account approval/suspension, password change, and operational actions remain unimplemented.
 
 ## Permission principles
 

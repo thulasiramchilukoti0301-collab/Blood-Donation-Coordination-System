@@ -81,8 +81,8 @@ export function createAuthRepository(databasePool) {
       }
     },
 
-    async findDonorProfile(accountId) {
-      const database = requirePool(databasePool);
+    async findDonorProfile(accountId, connection = databasePool) {
+      const database = requirePool(connection);
       const [rows] = await database.execute(
         `SELECT CAST(a.account_id AS CHAR) AS account_id, a.email, a.account_status,
                 d.full_name, DATE_FORMAT(d.date_of_birth, '%Y-%m-%d') AS date_of_birth,

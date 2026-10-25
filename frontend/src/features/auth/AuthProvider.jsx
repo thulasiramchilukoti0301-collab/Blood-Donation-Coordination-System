@@ -35,8 +35,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { void restore(); }, [restore]);
 
-  const getCsrfToken = useCallback(async () => {
-    const { data } = await api.get('/auth/csrf');
+  const getCsrfToken = useCallback(async (signal) => {
+    const { data } = await api.get('/auth/csrf', { signal });
     return data.csrfToken;
   }, []);
 
@@ -54,6 +54,14 @@ export function AuthProvider({ children }) {
     return api.post('/auth/register/donors', profile, { headers: { 'X-CSRF-Token': csrfToken } });
   }, [getCsrfToken]);
 
+  const updateDonorProfile = useCallback(async (patch, { signal } = {}) => {
+    const csrfToken = await getCsrfToken(signal);
+    const { data } = await api.patch('/donors/me', patch, {
+      signal, headers: { 'X-CSRF-Token': csrfToken },
+    });
+    return data.profile;
+  }, [getCsrfToken]);
+
   const logout = useCallback(async () => {
     const csrfToken = await getCsrfToken();
     await api.post('/auth/logout', {}, { headers: { 'X-CSRF-Token': csrfToken } });
@@ -62,8 +70,8 @@ export function AuthProvider({ children }) {
     setRestoreError('');
   }, [getCsrfToken]);
 
-  const value = useMemo(() => ({ user, loading, restoreError, login, registerDonor, logout, restore }),
-    [user, loading, restoreError, login, registerDonor, logout, restore]);
+  const value = useMemo(() => ({ user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore }),
+    [user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

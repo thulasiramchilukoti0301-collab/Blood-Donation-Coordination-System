@@ -1,6 +1,6 @@
 # UI Design Themes
 
-This document records three available visual theme options for the Blood Donation Coordination System. Theme assignment remains OPEN for every unimplemented screen in `ui-screen-map.md`; the user chooses each later page's theme. Rose Quartz Focus has been selected only for the implemented Login/registration, shared access/error, read-only Donor Profile, and account-status surfaces. Recommendations may favor Mint Gauge for quantities/status and Sky Pipeline for processes, but those recommendations are not assignments.
+This document records three available visual theme options for the Blood Donation Coordination System. Theme assignment remains OPEN for every unimplemented screen in `ui-screen-map.md`; the user chooses each later page's theme. Rose Quartz Focus has been selected only for the implemented Login/registration, shared access/error, Donor Profile read/edit, and account-status surfaces. Recommendations may favor Mint Gauge for quantities/status and Sky Pipeline for processes, but those recommendations are not assignments.
 
 ## Mint Gauge
 

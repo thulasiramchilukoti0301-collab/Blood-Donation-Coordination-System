@@ -16,7 +16,7 @@ export function createApp({ verifyDatabase = verifyDatabaseConnection, authRunti
       if (!origin || origin === environment.frontendUrl) return callback(null, true);
       callback(new HttpError(403, 'ORIGIN_NOT_ALLOWED', 'Request origin is not allowed.'));
     },
-    methods: ['GET', 'HEAD', 'POST', 'OPTIONS'],
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Accept', 'Content-Type', 'X-CSRF-Token'],
   }));
   app.use(express.json({ limit: '100kb' }));

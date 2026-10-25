@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import express from 'express';
 import { createAuthRepository } from './repository.js';
 import { createAuthService } from './service.js';
+import { createDonorRepository } from '../donors/repository.js';
+import { createDonorProfileService } from '../donors/service.js';
 import { validateDonorRegistration, validateLogin } from './validation.js';
 import { requireCurrentAccount, requireRole } from '../../middleware/auth.js';
 import { requireTrustedOriginAndCsrf } from '../../middleware/csrf.js';
@@ -18,6 +20,7 @@ function unavailableRouter() {
   const router = express.Router();
   router.use((req, res, next) => {
     const supported = (req.method === 'GET' && ['/auth/csrf', '/auth/me', '/donors/me'].includes(req.path))
+      || (req.method === 'PATCH' && req.path === '/donors/me')
       || (req.method === 'POST' && ['/auth/register/donors', '/auth/login', '/auth/logout'].includes(req.path));
     if (!supported) return next();
     return next(new HttpError(
@@ -29,7 +32,7 @@ function unavailableRouter() {
   return router;
 }
 
-export function createAuthRouter({ authService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
+export function createAuthRouter({ authService, donorService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
   const router = express.Router();
   const csrf = requireTrustedOriginAndCsrf(frontendUrl);
   const loginLimiter = createRateLimiter();
@@ -85,11 +88,19 @@ export function createAuthRouter({ authService, sessionStore, frontendUrl = envi
     }
   });
 
+  router.use('/donors/me', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.get('/donors/me', currentAccount, requireRole('DONOR'), async (req, res, next) => {
     try {
       const profile = await authService.donorProfile(req.authAccount.accountId);
       if (!profile) throw new HttpError(503, 'DONOR_PROFILE_UNAVAILABLE', 'The donor profile is unavailable.');
-      res.set('Cache-Control', 'no-store');
+      res.json({ success: true, profile });
+    } catch (error) { next(error); }
+  });
+
+  router.patch('/donors/me', currentAccount, requireRole('DONOR'), csrf, async (req, res, next) => {
+    try {
+      if (!donorService) throw new HttpError(503, 'DONOR_PROFILE_UNAVAILABLE', 'The donor profile is unavailable.');
+      const profile = await donorService.updateOwnProfile(req.authAccount.accountId, req.body);
       res.json({ success: true, profile });
     } catch (error) { next(error); }
   });
@@ -109,9 +120,10 @@ export function createAuthRuntime({ databasePool = pool, env = process.env, fron
   const sessionStore = persistentSessions.store;
   const repository = createAuthRepository(databasePool);
   const authService = createAuthService({ repository });
+  const donorService = createDonorProfileService({ repository: createDonorRepository(databasePool) });
   return {
     middleware: persistentSessions.middleware,
-    router: createAuthRouter({ authService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
+    router: createAuthRouter({ authService, donorService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
     sessionStore,
   };
 }
