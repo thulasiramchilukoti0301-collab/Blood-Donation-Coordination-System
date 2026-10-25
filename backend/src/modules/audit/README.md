@@ -1,0 +1,36 @@
+# AuditEvent internal writer
+
+This module supplies the minimal audit writer for future consuming services. It mounts no route and is not called by current authentication, Donor or Hospital flows. `database/migrations/010_audit.sql` authors only AuditEvent; review the explicit Account-only dependency-plan amendment with Thulasi before applying it. RequestStatusHistory/its trigger remain a later coordinated migration, number/filename UNASSIGNED. See [complete schema, review gates and evidence](../../../../docs/audit-foundation.md).
+
+## Exact API
+
+```js
+import { createAuditWriter } from './writer.js';
+
+const writer = createAuditWriter({ allowedActionCodes: reviewedActionCodes });
+const auditEventId = await writer.write(connection, event);
+```
+
+`reviewedActionCodes`, `connection` and `event` are real caller dependencies, not example identities or production action definitions. The factory requires a nonempty array of unique printable non-whitespace ASCII action strings, each 1–48 characters; there is no default registry or production action catalog. Exact membership is case-sensitive. Account action literals and Account API reason mapping remain OPEN for review with Thulasi.
+
+- `write(connection, event)` requires `actorAccountId`; the caller must derive it from the verified current Account, authorize the operation and validate the target in the same transaction.
+- `writeSystemEvent(connection, event)` rejects a supplied actor property and writes NULL actor. This separate method is for trusted system operations only; never select it from browser input.
+- Both methods return the generated AuditEvent ID as a plain decimal string.
+
+Allowed event properties are exactly `actorAccountId` (user method only), `actionCode`, `subjectType`, `subjectId`, optional `reasonCode`, `changeSummary`, `operationId`. Event IDs are positive canonical unsigned-BIGINT decimal strings or safe positive integers. `subjectId` is explicitly NULL exactly for `SYSTEM_TASK`. Other subjects use their existing entity ID; writer validation does not query that entity. The case-sensitive subject whitelist is the 14 approved entity names plus `SYSTEM_TASK`, including future domain names without claiming their tables exist.
+
+Omitted/NULL optional fields become SQL NULL; explicit undefined/blank text is invalid. Reason and summary preserve text, reject controls and enforce 40/1000 Unicode-code-point limits. An operation ID uses 36-character UUID-shaped hexadecimal groups and is preserved. The writer rejects unknown/hidden/symbol/accessor/nested properties and client-supplied timestamps or AuditEvent IDs. Never include passwords, hashes, session/CSRF tokens, secrets or unnecessary sensitive data in any field; a bounded scalar string is not automatic proof that its content is safe.
+
+## Caller-owned transaction
+
+Pass an existing mysql2 connection with `execute`, `beginTransaction`, `commit`, `rollback` capabilities; a pool with `getConnection` is rejected. The writer uses parameterized INSERT only. It does not acquire/release, begin/commit/roll back, retry, create tables, authorize an actor or test whether a transaction is already active. The caller begins the transaction, performs/validates the business operation, inserts its audit event on that same connection, and commits only if every step succeeds. Any failure must roll back the whole operation; preserve existing safe rollback-failure disposal behavior. Use the established project timezone.
+
+A trusted system event may have a real entity subject with NULL actor. Do not restrict NULL actor to `SYSTEM_TASK`, because future per-unit expiry events share an operation ID with a run-level system event. The storage contract makes operation/summary nullable; actual run-level scheduler events must meet their separate required grouping/summary policy.
+
+## Safe failures and scope
+
+Invalid event: 400 `VALIDATION_ERROR`. Invalid factory registry: 500 `AUDIT_CONFIGURATION_ERROR`. Invalid/missing connection or pool: 500 `AUDIT_CONNECTION_REQUIRED`. Driver/invalid-insert-ID failure: 503 `DATABASE_UNAVAILABLE`. Errors have generic safe messages; existing `HttpError` values remain preserved. No raw MySQL message, SQL values, secret payload or stack is exposed by this module.
+
+This writer does not implement Account approval, suspension/reactivation, session revocation, request history, audit search/API/UI, allocation, expiry or reports. Thulasi's shared Account service must integrate authorization, CSRF, reason, mutation/audit atomicity and revocation/fresh-login behavior after reviewing the storage/writer contract.
+
+Historical incoming-checkpoint verification on 2026-10-25 passed **22 audit-specific tests** (16 writer, four schema-text, metadata-representation and configuration-boundary checks) and **137 full backend tests**, with zero failures/skips. MySQL 8.0.39 passed the complete disposable verifier: exact metadata, 19 valid audit fixtures, 23 negative checks, restrictive actor FK, rollback to empty tables and connection closure. Additional real-connection tests proved that the writer does not commit caller changes and that an audit FK failure allows caller rollback of the business fixture. The prior failure was escaped quote delimiters in CHECK metadata, corrected in the verifier without changing DDL. Both verification schemas were removed and the isolated server shut down. Those MySQL results apply to the incoming tested revision. The integrated correction runs SHOW GRANTS metadata-visibility validation in both normal and dedicated modes, in addition to dedicated datadir/port checks; missing evidence rejects before inventory/fixtures. The corrected verifier has database-free regression coverage but has not been live-reverified. Development installation and Account approval remain pending; see the [current status and verification instructions](../../../../docs/audit-foundation.md).

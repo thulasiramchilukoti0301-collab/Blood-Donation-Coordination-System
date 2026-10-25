@@ -25,6 +25,12 @@ The one-time scaffold commit (`88fd043`) is integrated. Lathikaa's application f
 
 The database owner/dependency map is maintained in [`database/README.md`](../database/README.md). The feature owner remains responsible for their domain's schema, API, UI, validation, tests, and feature documentation. Shared Account, reference data, audit/history, setup assembly, and cross-domain changes require explicit coordination; agreement on one file or dependency does not transfer another owner's feature. The first bounded Authentication & Donor web feature is implemented on Thulasi's branch; user-run local setup and the basic registration/login/profile/logout flow were reported on 2026-10-25. Deeper live failure/concurrency checks and the rest of Authentication & Role Access remain pending.
 
+### Authored audit dependency-plan amendment
+
+The authorized minimal audit foundation keeps `010_audit.sql` numbered 010 but authors **AuditEvent only**, because its only FK parent is Account. The proposed reviewed assembly may therefore use 001 → 002 → 010 before HospitalRequest (008), unblocking the schema dependency for Thulasi's future shared Account approval/status workflow without implementing requests. This is an authored amendment for Thulasi review **before application**, not a statement that both developers have already agreed or that any database was changed. Foundation setup remains unchanged.
+
+Lathikaa retains Audit & Operational Tracking/request-history ownership; Thulasi retains Account authentication/approval/status ownership. RequestStatusHistory and its selected AFTER UPDATE trigger require a separate future coordinated migration, number/filename **UNASSIGNED**, after HospitalRequest and before request operations. They are not moved into 008 and will not be appended to 010 later. No existing migration is renumbered. Before approval integration, coordinate production action codes, Account reason mapping and transaction/audit/revocation failure behavior. The writer's explicit action registry does not itself approve vocabulary or perform Account authorization. See [audit foundation](audit-foundation.md).
+
 ## Synchronization
 
 Before synchronizing, commit work in progress or deliberately stash it. Preserve unfinished work; never reset, overwrite, or force-push shared history. The daily sync sequence is:
