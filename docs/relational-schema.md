@@ -128,6 +128,10 @@ AUDIT_EVENT(
 )
 ```
 
+The bounded AuditEvent foundation authors `010_audit.sql` for this existing nine-column relation only: generated unsigned PK, restrictive actor-to-Account FK, case-sensitive entity-name/`SYSTEM_TASK` subject whitelist, subject ID NULL exactly for `SYSTEM_TASK`, and the two documented actor/subject timestamp indexes. No action/reason enum or extra attribute is introduced. A trusted system event may have a NULL actor and a real entity subject; actor NULL is not restricted to run-level `SYSTEM_TASK` subjects.
+
+The dependency plan is explicitly amended for Thulasi review before application: Account-only 010 may precede request storage once reviewed. RequestStatusHistory and its AFTER UPDATE trigger remain a separate future coordinated migration with number/filename **UNASSIGNED**; they are not added to 008 or appended to 010 later. The logical history relation and initial/update event responsibilities above are unchanged. This amendment changes neither feature ownership nor the 14-entity model. See [audit foundation](audit-foundation.md).
+
 ## Derived values
 
 - Donor next-eligible date = last successful collected donation date + configured 56 days, subject to any active staff deferral. It is not stored as a donor attribute.
