@@ -6,7 +6,7 @@ This bounded milestone authors AuditEvent storage and an internal transaction-aw
 
 The previous reserved 010 unit combined AuditEvent with request-status history. The authorized minimal foundation keeps `database/migrations/010_audit.sql` numbered **010** and makes it **AuditEvent only**, because its sole FK parent is Account. No subject-type entry creates a FK to a future request/allocation table. The proposed dependency sequence for reviewed assembly is **001 → 002 → 010**; the optional existing BloodGroup reference seed may also be used for a disposable verifier target. Neither HospitalRequest (008) nor Allocation (009) is a dependency of AuditEvent storage.
 
-This is an authored amendment for **Thulasi review before application**, not a claim of prior teammate acceptance, schema installation or transferred ownership. Lathikaa retains audit/request-history ownership; Thulasi retains shared Account/authentication/approval/status ownership. No migration is renumbered and foundation setup is unchanged. RequestStatusHistory and `trg_request_status_history_update` require a separate future coordinated migration whose number/filename is **UNASSIGNED**. They are not moved into 008 and must not be appended to 010 later. Their initial application-written Submitted event, conditional AFTER UPDATE history and pooled-connection actor/reason cleanup contract stays unchanged.
+This dependency amendment is integrated at checkpoint `15ac4cf`; Thulasi's subsequent user-run local application is recorded below. That evidence does not transfer feature ownership or authorize the future history migration. Lathikaa retains audit/request-history ownership; Thulasi retains shared Account/authentication/approval/status ownership. No migration is renumbered and foundation setup is unchanged. RequestStatusHistory and `trg_request_status_history_update` require a separate future coordinated migration whose number/filename is **UNASSIGNED**. They are not moved into 008 and must not be appended to 010 later. Their initial application-written Submitted event, conditional AFTER UPDATE history and pooled-connection actor/reason cleanup contract stays unchanged.
 
 ## Exact storage contract
 
@@ -56,7 +56,7 @@ Existing `HttpError` values are preserved; raw MySQL errors, SQL text, values an
 
 ## Read-only development preflight
 
-No development migration is run by this milestone. After reviewing the authored amendment with Thulasi, inspect the intended local schema in Workbench before any separately authorized application. These queries read metadata only, not Accounts or audit payloads:
+This preflight documents checks before a separately authorized first application. Thulasi's completed preflight and 010 installation are recorded in the USER-RUN evidence below; this documentation update executes no SQL. These queries read metadata only, not Accounts or audit payloads:
 
 ```sql
 USE blood_donation_coordination;
@@ -77,7 +77,7 @@ Metadata visibility is privilege-filtered. Confirm the Account key matches the F
 
 ## Manual migration application boundary
 
-Complete the disposable verification below and review the 010-only dependency amendment with Thulasi before development application. In a fresh isolated schema the dependency sequence is 001 → 002 → 010; the storage verifier additionally requires the existing eight-row BloodGroup reference seed, so its assembly is 001 → 002 → reference_data.sql → 010. The seed is a verifier prerequisite, not an AuditEvent FK dependency.
+For a new local installation, complete the disposable verification below and review the 010-only dependency amendment with Thulasi before development application. In a fresh isolated schema the dependency sequence is 001 → 002 → 010; the storage verifier additionally requires the existing eight-row BloodGroup reference seed, so its assembly is 001 → 002 → reference_data.sql → 010. The seed is a verifier prerequisite, not an AuditEvent FK dependency.
 
 For an existing local schema with canonical Account already installed, do **not** rerun 001/002, seeds or foundation setup. In Workbench, select the intended schema, run the read-only preflight above, and confirm AuditEvent is absent. Only after the isolated pass and shared review, open and execute the reviewed `database/migrations/010_audit.sql` once, then inspect `SHOW CREATE TABLE AuditEvent` and `SHOW INDEX FROM AuditEvent`. DDL is not transactionally rolled back; an unexpected existing table or error means stop and inspect, not rerun or drop. No migration is automatically applied by the backend or this writer. Thulasi needs the Account parent and verified AuditEvent table before using audit insertion; HospitalRequest, RequestStatusHistory and Allocation are not prerequisites.
 
@@ -147,7 +147,7 @@ process.exitCode = result.status ?? 1;
 }
 ```
 
-Historical diagnostic and verification recorded on 2026-10-25 in incoming checkpoint `5b7f45acf38bba3e583b245939b2959c88efcf12` (before the metadata-visibility correction):
+Lathikaa's historical diagnostic and verification recorded on 2026-10-25 in incoming checkpoint `5b7f45acf38bba3e583b245939b2959c88efcf12` (before the metadata-visibility correction):
 
 | Check | Result |
 |---|---|
@@ -160,7 +160,7 @@ Historical diagnostic and verification recorded on 2026-10-25 in incoming checkp
 
 The failed assertion compared subject literals extracted from `information_schema.CHECK_CONSTRAINTS.CHECK_CLAUSE` with the approved subject list. MySQL returned escaped quote delimiters; the old regex retained the closing delimiter's backslash, yielding a value such as `Account` followed by a backslash. `database/tests/helpers/audit-metadata.mjs` now normalizes those quote escapes before parsing the whitelist or subject-ID expression. Regression coverage verifies that case, unexpected backslashes and extra expression text are not erased. **The approved DDL, subject whitelist, FK and CHECK constraints were not changed.** This was a metadata-representation/verifier expectation defect, not a schema defect.
 
-The earlier 20-audit/135-backend run and initial declined retry are historical; the user subsequently authorized this successful diagnostic. The Feature 6 115-backend/34-frontend results also remain historical; no frontend rerun is claimed here. Development database, existing Account/session records, credentials and grants were neither inspected nor changed during the authorized diagnostic. All Account rows used here were new disposable fixtures and were rolled back. These results apply to the incoming tested revision on the isolated MySQL version. That dedicated-server run used the earlier identity-only visibility path. The corrected verifier now requires SHOW GRANTS validation in both modes and has not been live-reverified. Development installation, Account approval/revocation integration and production concurrency remain pending.
+The earlier 20-audit/135-backend run and initial declined retry are historical; the user subsequently authorized this successful diagnostic. The Feature 6 115-backend/34-frontend results also remain historical; no frontend rerun is claimed here. Development database, existing Account/session records, credentials and grants were neither inspected nor changed during the authorized diagnostic. All Account rows used here were new disposable fixtures and were rolled back. These results apply to the incoming tested revision on the isolated MySQL version. That dedicated-server run used the earlier identity-only visibility path. The integration correction added SHOW GRANTS validation in both modes. The later normal-mode USER-RUN pass is recorded separately below; this historical run does not live-verify the corrected dedicated-server mode. Account approval/revocation integration and production concurrency remain pending.
 
 Reproduce the backend checks from `backend/` without loading private environment files:
 
@@ -180,14 +180,26 @@ for (const args of [
 '@ | node --input-type=module
 ```
 
+## USER-RUN local AuditEvent setup (2026-10-25)
+
+The user reported the following results from **Thulasi's environment**, using the corrected verifier at checkpoint **`15ac4cf`**. These are user-run observations, not MySQL queries or tests executed by this documentation update. They are separate from Lathikaa's historical incoming-revision MySQL evidence and the earlier Codex-run automated checks.
+
+- **Normal-mode disposable verification:** `database/tests/verify-audit.mjs` passed on **127.0.0.1:3306**, against `bddc_phase3_test_audit_20261025_first`, assembled in order **001 -> 002 -> reference_data.sql -> 010**. All **23 negative checks** passed. **Nineteen AuditEvent fixtures and one Account fixture** were rolled back; both fixture tables were empty afterward and the connection closed.
+- **Development installation and structure:** preflight found Account as InnoDB and AuditEvent absent. Only `database/migrations/010_audit.sql` was then applied to `blood_donation_coordination`. `SHOW CREATE TABLE` and `SHOW INDEX` matched the approved nine columns, primary key, restrictive actor FK, two CHECKs and two composite indexes.
+- **Application-account read access:** the configured application account passed AuditEvent SELECT access. Existing database-level SELECT/INSERT/UPDATE/DELETE grants were observed. No grants were changed and no application audit-write test was performed.
+
+This verifies the corrected normal-mode disposable verifier and the stated local storage setup/read access only. **Dedicated-server mode was not live-reverified here.** Account approval, production action/reason mappings, transactional session revocation, Admin provisioning, audit APIs/UI and concurrency remain pending. Rolled-back fixtures are not permanent sample data.
+
+Lathikaa retains Audit feature ownership; Thulasi retains Account/authentication/approval ownership. This local installation is not evidence of a change to Lathikaa's database. The continuing personal branches, reviewed pushed-checkpoint exchange and deferred main merge remain as documented in [team workflow](team-workflow.md); PR #5 remains cumulative and open.
+
 ## Resume assessment and checkpoint
 
 | State | Assessment |
 |---|---|
 | SOURCE COMPLETE | Approved DDL/indexes, internal writer, parameterized insertion and validation/error boundaries; database-free visibility correction and regressions are integrated. Historical MySQL evidence applies to the incoming tested revision |
-| DEVELOPMENT APPLICATION PENDING | The source integration does not apply 010 to either developer's database; deliberate installation and structure/access verification remain separate |
-| OPEN / OUT OF SCOPE | Production Account action registry/reason mapping, shared approval/revocation integration, audit search/UI and the separately coordinated request-history migration |
-| LIVE REVERIFICATION PENDING | The corrected visibility preflight has not been exercised against MySQL; the earlier disposable pass does not verify this revision |
+| LOCAL SETUP USER-VERIFIED | Thulasi's 2026-10-25 evidence records application of only 010, matching structure/indexes and application-account SELECT access; no application audit-write test was performed |
+| OPEN / OUT OF SCOPE | Production Account action registry/reason mapping, shared approval/transactional session-revocation integration, Admin provisioning, audit APIs/UI, concurrency and the separately coordinated request-history migration |
+| NORMAL MODE USER-VERIFIED / DEDICATED MODE PENDING | The corrected verifier at `15ac4cf` passed the normal-mode disposable run reported above; corrected dedicated-server mode was not live-reverified |
 
 The published AuditEvent checkpoint is `5b7f45acf38bba3e583b245939b2959c88efcf12`, based on Hospital checkpoint `4cd32bf659068ccd360dc05e77427caadac37e3b`. Its integration on `thulasiram` preserves both developers' Hospital evidence and the existing Donor contact/reported-group features. Lathikaa retains Audit feature ownership; this is the authorized shared verifier correction, not an Account approval implementation.
 
@@ -195,6 +207,6 @@ The new `backend/tests/audit-verifier-preflight.test.js` executes the actual sta
 
 ## Thulasi integration dependency
 
-Shared `GET /api/admin/accounts` and `PATCH /api/admin/accounts/:accountId` remain unimplemented. Before enabling Hospital approval/status controls, Thulasi must review this schema/writer contract and the 010 dependency amendment, coordinate production action/reason mappings, verify the installed table and integrate current ACTIVE ADMIN authorization, target/transition checks, session-bound CSRF, required reason, same-transaction Account mutation/audit and safe failure handling. Account-wide session revocation and reactivation's fresh-login guarantee must be integrated and tested, including concurrent login/stale-save cases. The existing revocation primitive is not an approval workflow. No Hospital-only Account update or bypass is added; Screen 24 keeps status read-only.
+Shared `GET /api/admin/accounts` and `PATCH /api/admin/accounts/:accountId` remain unimplemented. Thulasi's local storage/structure and application-account read prerequisites have the USER-RUN evidence above. Before enabling Hospital approval/status controls, Thulasi must coordinate production action/reason mappings and integrate current ACTIVE ADMIN authorization, target/transition checks, session-bound CSRF, required reason, same-transaction Account mutation/audit and safe failure handling. Account-wide session revocation and reactivation's fresh-login guarantee must be integrated and tested, including concurrent login/stale-save cases. The existing revocation primitive is not an approval workflow. No Hospital-only Account update or bypass is added; Screen 24 keeps status read-only.
 
 Feature 7 still needs HospitalRequest, the later UNASSIGNED history migration/trigger and required lookup/transition contracts. Feature 8 needs compatibility/Allocation and transaction/locking verification. Full Feature 9 audit search/UI and Feature 10 reports remain later work. The minimal foundation supplies a shared dependency without implementing those features.
