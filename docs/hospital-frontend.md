@@ -4,6 +4,8 @@ The current Feature 6 checkpoint implements three Mint Gauge surfaces: Hospital 
 
 Lathikaa reports successful real local Hospital registration and login, with the Profile displaying the saved organization, registration/contact information and PENDING status. This is user-demonstrated local evidence, separate from automated tests and from checks performed by Codex. Live Admin management, failure/rollback/concurrency and approval/revocation verification remain pending; this evidence does not make all of Feature 6 complete.
 
+Separate [USER-RUN evidence dated 2026-10-25 from Thulasi's environment](implementation-readiness.md#user-run-hospital-evidence-in-thulasis-environment-2026-10-25) records Hospital registration without automatic login, explicit login to the Mint Gauge Profile, saved/persistent contact edits, draft cancellation, read-only organization/registration/status, and preserved Donor flows. This does not verify live Admin management or complete shared account approval.
+
 ## Screens, APIs and state
 
 | Mounted Hospital API | Access and behavior |

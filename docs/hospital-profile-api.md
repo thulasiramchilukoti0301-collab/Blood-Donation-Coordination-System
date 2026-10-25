@@ -2,6 +2,8 @@
 
 The original Profile integration was implemented on `lathikaa` on 2026-10-25 after merged checkpoint `66e726b`, mounting GET/PATCH `/api/hospitals/me` through the existing Hospital service/repository and shared authentication. Subsequent milestones also implement atomic Hospital registration, ACTIVE ADMIN Hospital list/detail and their React surfaces; this document specifies the own-Profile contract. Donor workflows/private configuration are preserved. No MySQL connection or database operation was performed by the implementation/testing tasks. Lathikaa has separately demonstrated real Hospital registration/login in her environment with correct saved PENDING Profile information; live Admin and failure/concurrency checks remain pending.
 
+Separate [USER-RUN evidence dated 2026-10-25 from Thulasi's environment](implementation-readiness.md#user-run-hospital-evidence-in-thulasis-environment-2026-10-25) records successful Hospital login and contact editing/persistence/cancellation with protected UI fields remaining read-only. API tampering, transaction failure/rollback, concurrency, suspension/reactivation and AuditEvent integration remain unverified live; shared approval remains pending.
+
 ## Mounted contracts and guards
 
 | Route | Request | Success |

@@ -2,6 +2,8 @@
 
 Implemented on `lathikaa` on 2026-10-25, preserving the Hospital Profile integration and Donor workflows. Lathikaa reports Account, Hospital and app_session installed in her environment's `blood_donation_coordination` on 127.0.0.1:3306 and has demonstrated successful real Hospital registration/login with the correct saved organization, registration/contact fields and PENDING Profile. This user-reported live flow is separate from isolated automated tests and does not establish live failure/concurrency or Admin access. Implementation/testing did not inspect or modify that database, open private environment files, run migrations or create demonstration records.
 
+Separate [USER-RUN evidence dated 2026-10-25 from Thulasi's environment](implementation-readiness.md#user-run-hospital-evidence-in-thulasis-environment-2026-10-25) records 004 installation/structure, application-account Hospital SELECT access, PENDING Hospital registration without automatic login, and explicit login to the Mint Gauge Profile. This is distinct from Lathikaa's evidence and the earlier automated tests; live Admin and failure/security/concurrency checks remain pending.
+
 ## Exact HTTP contract
 
 POST `/api/auth/register/hospitals` is public registration protected by the existing session-bound CSRF middleware and rate-limiter factory. It creates a new Account and matching Hospital row in one MySQL transaction. The server always assigns HOSPITAL/PENDING. Registration does not sign in, switch the current authenticated identity, or return a session identifier/token. A new registrant must explicitly use the existing login endpoint before accessing protected Profile APIs.
