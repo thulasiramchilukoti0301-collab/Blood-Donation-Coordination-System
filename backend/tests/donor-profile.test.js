@@ -14,19 +14,22 @@ const saved = Object.freeze({
   accountId, email: 'donor@example.test', accountStatus: 'PENDING',
   fullName: 'Sample Donor', dateOfBirth: '1990-01-01', phone: '+91 90000 00000',
   address: '12 Example Road', area: 'Central',
-  reportedBloodGroup: { id: '2', code: 'A+', displayName: 'A positive' },
+  reportedBloodGroup: { id: '4', code: 'A+', displayName: 'A positive' },
   confirmedBloodGroup: null,
 });
 
-test('PATCH validates only supplied contact fields using registration text conventions', () => {
+test('PATCH validates only supplied profile fields using registration conventions', () => {
   assert.deepEqual(validateDonorProfilePatch({
     fullName: '  A😀  ', phone: ' +91 123 ', address: ' Road ', area: '  ',
   }), { fullName: 'A😀', phone: '+91 123', address: 'Road', area: null });
   assert.deepEqual(validateDonorProfilePatch({ area: null }), { area: null });
   assert.deepEqual(validateDonorProfilePatch({ area: '  ' }), { area: null });
+  assert.deepEqual(validateDonorProfilePatch({ reportedBloodGroupId: '4' }), { reportedBloodGroupId: '4' });
+  assert.deepEqual(validateDonorProfilePatch({ reportedBloodGroupId: null }), { reportedBloodGroupId: null });
+  assert.deepEqual(validateDonorProfilePatch({ reportedBloodGroupId: '' }), { reportedBloodGroupId: null });
   assert.deepEqual(validateDonorProfilePatch({ fullName: '😀'.repeat(120) }), { fullName: '😀'.repeat(120) });
   for (const body of [null, [], 'name', 7, {}, new Date(), { accountId }, { email: 'new@example.test' },
-    { dateOfBirth: '2000-01-01' }, { reportedBloodGroupId: '1' }, { confirmedBloodGroupId: '1' },
+    { dateOfBirth: '2000-01-01' }, { confirmedBloodGroupId: '1' },
     { role: 'ADMIN' }, { accountStatus: 'ACTIVE' }, { password: 'secret' }, { updatedAt: 'today' }]) {
     assert.throws(() => validateDonorProfilePatch(body),
       (error) => error instanceof HttpError && error.code === 'VALIDATION_ERROR');
@@ -41,11 +44,16 @@ test('PATCH validates only supplied contact fields using registration text conve
     (error) => error.code === 'VALIDATION_ERROR' && Boolean(error.fields.area));
   assert.throws(() => validateDonorProfilePatch({ area: 'bad\narea' }),
     (error) => error.code === 'VALIDATION_ERROR' && Boolean(error.fields.area));
+  for (const id of ['-1', 'x', '0', '18446744073709551616', 1.5, {}, true]) {
+    assert.throws(() => validateDonorProfilePatch({ reportedBloodGroupId: id }),
+      (error) => error.code === 'VALIDATION_ERROR' && Boolean(error.fields.reportedBloodGroupId));
+  }
 });
 
-function transactionFixture({ status = 'PENDING', role = 'DONOR', donorPresent = true, updateError, commitError, rollbackError } = {}) {
+function transactionFixture({ status = 'PENDING', role = 'DONOR', donorPresent = true, groupPresent = true, initialGroupId = '4',
+  updateError, commitError, rollbackError } = {}) {
   const calls = [];
-  const rows = { ...saved, accountStatus: status };
+  const rows = { ...saved, accountStatus: status, reportedBloodGroupId: initialGroupId };
   const connection = {
     async beginTransaction() { calls.push('begin'); },
     async execute(sql, values) {
@@ -58,13 +66,18 @@ function transactionFixture({ status = 'PENDING', role = 'DONOR', donorPresent =
         calls.push('lock-donor');
         return [donorPresent ? [{ account_id: accountId }] : []];
       }
+      if (sql.includes('FROM BloodGroup')) {
+        calls.push('lookup-group');
+        return [groupPresent ? [{ blood_group_id: values[0] }] : []];
+      }
       if (sql.startsWith('UPDATE Donor')) {
         calls.push('update');
         assert.match(sql, /updated_at = CURRENT_TIMESTAMP/);
+        assert.doesNotMatch(sql, /confirmed_blood_group_id|account_status|date_of_birth|email/);
         assert.equal(values.at(-1), accountId);
         if (updateError) throw updateError;
-        const properties = { full_name: 'fullName', phone: 'phone', address: 'address', area: 'area' };
-        const columns = [...sql.matchAll(/(full_name|phone|address|area) = \?/gu)].map((match) => match[1]);
+        const properties = { full_name: 'fullName', phone: 'phone', address: 'address', area: 'area', reported_blood_group_id: 'reportedBloodGroupId' };
+        const columns = [...sql.matchAll(/(full_name|phone|address|area|reported_blood_group_id) = \?/gu)].map((match) => match[1]);
         columns.forEach((column, index) => { rows[properties[column]] = values[index]; });
         return [{ affectedRows: 0 }];
       }
@@ -74,8 +87,10 @@ function transactionFixture({ status = 'PENDING', role = 'DONOR', donorPresent =
           account_id: accountId, email: rows.email, account_status: status,
           full_name: rows.fullName, date_of_birth: rows.dateOfBirth,
           phone: rows.phone, address: rows.address, area: rows.area,
-          reported_blood_group_id: '2', reported_blood_group_code: 'A+',
-          reported_blood_group_name: 'A positive', confirmed_blood_group_id: null,
+          reported_blood_group_id: rows.reportedBloodGroupId === undefined ? '4' : rows.reportedBloodGroupId,
+          reported_blood_group_code: rows.reportedBloodGroupId === '2' ? 'O+' : 'A+',
+          reported_blood_group_name: rows.reportedBloodGroupId === '2' ? 'O positive' : 'A positive',
+          confirmed_blood_group_id: null,
         }]];
       }
       throw new Error('Unexpected query.');
@@ -84,7 +99,7 @@ function transactionFixture({ status = 'PENDING', role = 'DONOR', donorPresent =
     async rollback() { calls.push('rollback'); if (rollbackError) throw rollbackError; },
     release() { calls.push('release'); },
   };
-  return { calls, connection, repository: createDonorRepository({ async getConnection() { calls.push('connection'); return connection; } }) };
+  return { calls, rows, connection, repository: createDonorRepository({ async getConnection() { calls.push('connection'); return connection; } }) };
 }
 
 test('repository locks Account before Donor, uses fixed columns and same connection, commits unchanged updates', async () => {
@@ -113,6 +128,43 @@ test('repository locks Account before Donor, uses fixed columns and same connect
     .updateOwnProfile(accountId, { phone: ' 456 ' });
   assert.equal(activeProfile.phone, '456');
   assert.equal(activeProfile.accountStatus, 'ACTIVE');
+});
+
+test('reported group selection, change, clearing, and omission preserve confirmation', async () => {
+  const fixture = transactionFixture();
+  const service = createDonorProfileService({ repository: fixture.repository });
+  const changed = await service.updateOwnProfile(accountId, { reportedBloodGroupId: '2' });
+  assert.deepEqual(changed.reportedBloodGroup, { id: '2', code: 'O+', displayName: 'O positive' });
+  assert.equal(changed.confirmedBloodGroup, null);
+  assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-donor', 'lookup-group', 'update', 'read-profile', 'commit', 'release']);
+  const preserved = await service.updateOwnProfile(accountId, { phone: '456' });
+  assert.equal(preserved.reportedBloodGroup.id, '2');
+  assert.equal(preserved.phone, '456');
+  const cleared = await service.updateOwnProfile(accountId, { reportedBloodGroupId: null });
+  assert.equal(cleared.reportedBloodGroup, null);
+  assert.equal(cleared.confirmedBloodGroup, null);
+  const blank = transactionFixture({ initialGroupId: null });
+  const selected = await createDonorProfileService({ repository: blank.repository })
+    .updateOwnProfile(accountId, { reportedBloodGroupId: '2' });
+  assert.equal(selected.reportedBloodGroup.id, '2');
+});
+
+test('missing reported group and FK race roll back without partial profile updates', async () => {
+  for (const options of [
+    { groupPresent: false, code: 'VALIDATION_ERROR', expectedCalls: ['lookup-group', 'rollback'] },
+    { updateError: { code: 'ER_NO_REFERENCED_ROW_2' }, code: 'VALIDATION_ERROR', expectedCalls: ['update', 'rollback'] },
+  ]) {
+    const { code, expectedCalls, ...fixtureOptions } = options;
+    const fixture = transactionFixture(fixtureOptions);
+    const service = createDonorProfileService({ repository: fixture.repository });
+    await assert.rejects(service.updateOwnProfile(accountId, { fullName: 'Changed', reportedBloodGroupId: '999' }),
+      (error) => error instanceof HttpError && error.status === 422 && error.code === code
+        && Boolean(error.fields.reportedBloodGroupId));
+    for (const call of expectedCalls) assert.ok(fixture.calls.includes(call));
+    assert.ok(!fixture.calls.includes('commit'));
+    assert.equal(fixture.calls.at(-1), 'release');
+    assert.equal(fixture.rows.fullName, saved.fullName);
+  }
 });
 
 test('transaction rechecks role/status, missing Donor, rollback and release safely', async () => {
@@ -296,6 +348,7 @@ test('HTTP PATCH rejects protected/invalid payloads and reports safe missing-pro
     {}, [], { fullName: '' }, { phone: null }, { address: 'x'.repeat(256) },
     { area: 'bad\narea' }, { accountId: '1' }, { email: 'other@example.test' },
     { dateOfBirth: '2001-01-01' }, { confirmedBloodGroupId: '1' },
+    { reportedBloodGroupId: '2', confirmedBloodGroupId: '2' },
   ]) {
     const response = await request(base, '/donors/me', {
       method: 'PATCH', cookie: boot.cookie, csrf: boot.csrf, body,

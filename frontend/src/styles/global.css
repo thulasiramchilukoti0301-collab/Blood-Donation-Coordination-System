@@ -99,9 +99,9 @@ h3 { margin: 0; font-size: 17px; font-weight: 650; }
 .auth-card { width: 100%; max-width: 640px; margin-right: auto; margin-left: auto; }
 .auth-card form { display: grid; gap: 8px; }
 .auth-card label { margin-top: 9px; color: var(--rose-text); font-size: 14px; font-weight: 700; }
-.auth-card input, .auth-card textarea, .profile-edit-fields input, .profile-edit-fields textarea { width: 100%; min-height: 45px; padding: 10px 12px; border: 1px solid #EDC4CB; border-radius: 9px; color: var(--rose-text); background: #fff; font: inherit; font-size: 15px; }
+.auth-card input, .auth-card textarea, .auth-card select, .profile-edit-fields input, .profile-edit-fields textarea, .profile-edit-fields select { width: 100%; min-height: 45px; padding: 10px 12px; border: 1px solid #EDC4CB; border-radius: 9px; color: var(--rose-text); background: #fff; font: inherit; font-size: 15px; }
 .auth-card textarea, .profile-edit-fields textarea { resize: vertical; }
-.auth-card input:focus-visible, .auth-card textarea:focus-visible, .profile-edit-fields input:focus-visible, .profile-edit-fields textarea:focus-visible { outline: 3px solid #E66A8270; outline-offset: 2px; border-color: var(--rose-action); }
+.auth-card input:focus-visible, .auth-card textarea:focus-visible, .auth-card select:focus-visible, .profile-edit-fields input:focus-visible, .profile-edit-fields textarea:focus-visible, .profile-edit-fields select:focus-visible { outline: 3px solid #E66A8270; outline-offset: 2px; border-color: var(--rose-action); }
 .rose-app-shell button:focus-visible, .rose-app-shell a:focus-visible { outline: 3px solid #C0485A; outline-offset: 3px; }
 .rose-primary-button { min-height: 48px; margin-top: 14px; border: 1px solid var(--rose-action); border-radius: 10px; color: #fff; background: var(--rose-action); font-weight: 800; }
 .rose-primary-button:hover:enabled { background: var(--rose-action-hover); }

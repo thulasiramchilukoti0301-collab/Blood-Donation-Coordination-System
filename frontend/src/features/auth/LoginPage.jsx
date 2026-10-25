@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import AuthLayout from './AuthLayout';
 import { useAuth } from './AuthProvider';
+import { registrationReportedGroupId, reportedBloodGroupChoices } from '../donors/bloodGroups';
 
 function apiError(error) {
   return error?.response?.data?.error;
@@ -20,7 +21,7 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [values, setValues] = useState({
-    fullName: '', email: '', password: '', dateOfBirth: '', phone: '', address: '', area: '',
+    fullName: '', email: '', password: '', dateOfBirth: '', phone: '', address: '', area: '', reportedBloodGroupId: '',
   });
 
   if (loading) return <AuthLayout><section className="rose-card" aria-busy="true"><p role="status">Checking your sign-in status…</p></section></AuthLayout>;
@@ -36,7 +37,7 @@ export default function LoginPage() {
     try {
       if (registerMode) {
         const { password, ...profile } = values;
-        await registerDonor({ ...profile, password });
+        await registerDonor({ ...profile, reportedBloodGroupId: registrationReportedGroupId(profile.reportedBloodGroupId), password });
         setValues((current) => ({ ...current, password: '' }));
         setRegisterMode(false);
         setSuccess('Your Donor account is registered and pending review. Sign in to view its status.');
@@ -91,7 +92,13 @@ export default function LoginPage() {
             <label htmlFor="area">Area <span className="optional-label">Optional</span></label>
             <input id="area" name="area" autoComplete="address-level2" maxLength={100} value={values.area} onChange={update('area')} />
             <FieldError>{fieldErrors.area}</FieldError>
-            <p className="field-note">Reported blood group is optional and can be left unset during registration.</p>
+            <label htmlFor="reportedBloodGroupId">Reported blood group — <span className="optional-label">Optional</span></label>
+            <select id="reportedBloodGroupId" name="reportedBloodGroupId" value={values.reportedBloodGroupId} onChange={update('reportedBloodGroupId')} aria-describedby="registration-group-note" aria-invalid={Boolean(fieldErrors.reportedBloodGroupId)}>
+              <option value="">I don’t know / Not provided</option>
+              {reportedBloodGroupChoices.map((group) => <option key={group.id} value={group.id}>{group.code} — {group.displayName}</option>)}
+            </select>
+            <FieldError>{fieldErrors.reportedBloodGroupId}</FieldError>
+            <p className="field-note" id="registration-group-note">This is self-reported and awaits staff confirmation.</p>
           </>}
           <label htmlFor="password">Password</label>
           <input id="password" name="password" type="password" autoComplete={registerMode ? 'new-password' : 'current-password'} required value={values.password} onChange={update('password')} />

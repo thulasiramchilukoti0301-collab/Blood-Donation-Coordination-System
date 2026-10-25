@@ -6,6 +6,7 @@ const editableColumns = Object.freeze({
   phone: 'phone',
   address: 'address',
   area: 'area',
+  reportedBloodGroupId: 'reported_blood_group_id',
 });
 
 export function createDonorRepository(databasePool) {
@@ -31,6 +32,13 @@ export function createDonorRepository(databasePool) {
             const [rows] = await connection.execute(
               'SELECT account_id FROM Donor WHERE account_id = ? FOR UPDATE',
               [String(accountId)],
+            );
+            return rows[0] ?? null;
+          },
+          async findReportedBloodGroup(id) {
+            const [rows] = await connection.execute(
+              'SELECT blood_group_id FROM BloodGroup WHERE blood_group_id = ? LIMIT 1',
+              [id],
             );
             return rows[0] ?? null;
           },

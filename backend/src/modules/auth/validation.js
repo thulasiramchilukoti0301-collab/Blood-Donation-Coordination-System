@@ -95,11 +95,16 @@ export function validateDonorProfilePatch(body) {
     || ![Object.prototype, null].includes(Object.getPrototypeOf(body))) {
     fail({ body: 'Enter profile changes to save.' });
   }
-  const allowed = new Set(['fullName', 'phone', 'address', 'area']);
+  const allowed = new Set(['fullName', 'phone', 'address', 'area', 'reportedBloodGroupId']);
   rejectUnknownFields(body, allowed);
   const fields = Object.keys(body);
   if (!fields.length) fail({ body: 'Enter profile changes to save.' });
   return Object.fromEntries(fields.map((field) => {
+    if (field === 'reportedBloodGroupId') {
+      const id = optionalUnsignedId(body[field]);
+      if (id === undefined) fail({ reportedBloodGroupId: 'Choose a valid blood group identifier or leave it blank.' });
+      return [field, id];
+    }
     if (typeof body[field] === 'string' && /\p{Cc}/u.test(body[field])) {
       fail({ [field]: 'Control characters are not allowed.' });
     }

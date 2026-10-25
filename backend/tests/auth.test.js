@@ -119,6 +119,52 @@ test('donor registration transaction rolls back a profile insertion failure and 
   assert.deepEqual(calls, ['begin', 'account-insert', 'donor-insert', 'rollback', 'release']);
 });
 
+test('registration stores only selected reported group, and unknown group rolls back before inserts', async () => {
+  for (const selectedId of ['4', null]) {
+    const calls = [];
+    let inserted;
+    const connection = {
+      beginTransaction: async () => calls.push('begin'),
+      execute: async (sql, parameters) => {
+        if (sql.includes('FROM BloodGroup')) {
+          calls.push('lookup-group');
+          assert.deepEqual(parameters, [selectedId]);
+          return [[{ blood_group_id: selectedId }]];
+        }
+        if (sql.includes('INSERT INTO Account')) { calls.push('account-insert'); return [{ insertId: '201' }]; }
+        if (sql.includes('INSERT INTO Donor')) { calls.push('donor-insert'); inserted = { sql, parameters }; return [{}]; }
+        throw new Error('Unexpected injected SQL operation.');
+      },
+      commit: async () => calls.push('commit'),
+      rollback: async () => calls.push('rollback'),
+      release: () => calls.push('release'),
+    };
+    const validated = validateDonorRegistration({ ...validRegistration, reportedBloodGroupId: selectedId });
+    await createAuthRepository({ getConnection: async () => connection }).createDonorAccountProfile({
+      ...validated, passwordHash: 'test-hash',
+    });
+    assert.equal(inserted.parameters.at(-1), selectedId);
+    assert.match(inserted.sql, /confirmed_blood_group_id\)\s+VALUES \(\?, \?, \?, \?, \?, \?, \?, NULL\)/u);
+    assert.deepEqual(calls, selectedId ? ['begin', 'lookup-group', 'account-insert', 'donor-insert', 'commit', 'release']
+      : ['begin', 'account-insert', 'donor-insert', 'commit', 'release']);
+  }
+  const calls = [];
+  const missing = {
+    beginTransaction: async () => calls.push('begin'),
+    execute: async (sql) => {
+      assert.match(sql, /FROM BloodGroup/u);
+      calls.push('lookup-group');
+      return [[]];
+    },
+    rollback: async () => calls.push('rollback'),
+    release: () => calls.push('release'),
+  };
+  await assert.rejects(createAuthRepository({ getConnection: async () => missing }).createDonorAccountProfile({
+    ...validateDonorRegistration({ ...validRegistration, reportedBloodGroupId: '999' }), passwordHash: 'test-hash',
+  }), (error) => error.status === 422 && error.code === 'INVALID_BLOOD_GROUP');
+  assert.deepEqual(calls, ['begin', 'lookup-group', 'rollback', 'release']);
+});
+
 test('a concurrent database email duplicate becomes a safe conflict response', async () => {
   const service = createAuthService({
     repository: { createDonorAccountProfile: async () => { throw Object.assign(new Error('private details'), { code: 'ER_DUP_ENTRY' }); } },

@@ -3,41 +3,16 @@ import { Navigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import AuthLayout from '../auth/AuthLayout';
 import { useAuth } from '../auth/AuthProvider';
-
-const editableFields = ['fullName', 'phone', 'address', 'area'];
-const maxLengths = { fullName: 120, phone: 30, address: 255, area: 100 };
+import { reportedBloodGroupChoices } from './bloodGroups';
+import { changedFields, draftErrors, draftFrom } from './profileDraft';
 
 function StatusNotice({ status }) {
-  if (status === 'PENDING') return <div className="notice notice-pending"><strong>Pending staff review</strong><span>You can edit your contact profile. Donation booking and other operational actions are not available yet.</span></div>;
-  return <div className="notice notice-success"><strong>Active account</strong><span>Your account is active. You can review and edit your contact profile.</span></div>;
+  if (status === 'PENDING') return <div className="notice notice-pending"><strong>Pending staff review</strong><span>You can edit your contact profile and reported blood group. Donation booking and other operational actions are not available yet.</span></div>;
+  return <div className="notice notice-success"><strong>Active account</strong><span>Your account is active. You can review and edit your contact profile and reported blood group.</span></div>;
 }
 
 function Detail({ label, children }) {
   return <div className="profile-detail"><dt>{label}</dt><dd>{children || 'Not provided'}</dd></div>;
-}
-
-function draftFrom(profile) {
-  return Object.fromEntries(editableFields.map((field) => [field, profile[field] ?? '']));
-}
-
-function changedFields(draft, profile) {
-  const patch = {};
-  for (const field of editableFields) {
-    const value = draft[field].trim();
-    if (value !== (profile[field] ?? '')) patch[field] = field === 'area' && !value ? null : value;
-  }
-  return patch;
-}
-
-function draftErrors(patch) {
-  const errors = {};
-  for (const [field, value] of Object.entries(patch)) {
-    if (field === 'area' && value === null) continue;
-    if (!value || [...value].length > maxLengths[field] || /\p{Cc}/u.test(value)) {
-      errors[field] = `Enter ${field === 'area' ? 'up to' : 'between 1 and'} ${maxLengths[field]} characters without control characters.`;
-    }
-  }
-  return errors;
 }
 
 export default function DonorProfilePage() {
@@ -161,7 +136,7 @@ export default function DonorProfilePage() {
       <section className="auth-intro">
         <p className="rose-eyebrow">Donor account</p>
         <h1>Your profile</h1>
-        <p>Review and update your saved contact details.</p>
+        <p>Review and update your saved contact details and self-reported blood group.</p>
       </section>
       {restoreError && <p className="notice notice-error" role="alert">{restoreError}</p>}
       {state === 'loading' && <section className="rose-card" aria-busy="true"><p role="status">Loading your saved profile…</p></section>}
@@ -172,7 +147,7 @@ export default function DonorProfilePage() {
         {editing ? <>
           <form className="profile-edit-form" onSubmit={save} noValidate>
             <fieldset className="profile-edit-fields" disabled={saving}>
-              <legend>Edit contact details</legend>
+              <legend>Edit profile details</legend>
               <label htmlFor="profile-full-name">Full name</label>
               <input id="profile-full-name" name="fullName" autoComplete="name" required value={draft.fullName} aria-invalid={Boolean(fieldErrors.fullName)} aria-describedby={fieldErrors.fullName ? 'profile-full-name-error' : undefined} onChange={(event) => change('fullName', event.target.value)} />
               {fieldErrors.fullName && <span className="field-error" id="profile-full-name-error">{fieldErrors.fullName}</span>}
@@ -185,6 +160,13 @@ export default function DonorProfilePage() {
               <label htmlFor="profile-area">Area <span className="optional-label">Optional</span></label>
               <input id="profile-area" name="area" autoComplete="address-level2" value={draft.area} aria-invalid={Boolean(fieldErrors.area)} aria-describedby={fieldErrors.area ? 'profile-area-error' : undefined} onChange={(event) => change('area', event.target.value)} />
               {fieldErrors.area && <span className="field-error" id="profile-area-error">{fieldErrors.area}</span>}
+              <label htmlFor="profile-reported-group">Reported blood group — <span className="optional-label">Optional</span></label>
+              <select id="profile-reported-group" name="reportedBloodGroupId" value={draft.reportedBloodGroupId} aria-invalid={Boolean(fieldErrors.reportedBloodGroupId)} aria-describedby={fieldErrors.reportedBloodGroupId ? 'profile-reported-group-error profile-reported-group-note' : 'profile-reported-group-note'} onChange={(event) => change('reportedBloodGroupId', event.target.value)}>
+                <option value="">I don’t know / Not provided</option>
+                {reportedBloodGroupChoices.map((group) => <option key={group.id} value={group.id}>{group.code} — {group.displayName}</option>)}
+              </select>
+              {fieldErrors.reportedBloodGroupId && <span className="field-error" id="profile-reported-group-error">{fieldErrors.reportedBloodGroupId}</span>}
+              <p className="field-note" id="profile-reported-group-note">This is self-reported and awaits staff confirmation.</p>
             </fieldset>
             {formError && <p className="notice notice-error" role="alert">{formError}</p>}
             <div className="profile-edit-actions">
@@ -195,7 +177,6 @@ export default function DonorProfilePage() {
           <dl className="profile-grid" aria-label="Read-only account details">
             <Detail label="Email">{currentProfile.email}</Detail>
             <Detail label="Date of birth">{currentProfile.dateOfBirth}</Detail>
-            <Detail label="Reported blood group">{currentProfile.reportedBloodGroup?.displayName}</Detail>
             <Detail label="Confirmed blood group">{currentProfile.confirmedBloodGroup?.displayName || 'Not confirmed'}</Detail>
           </dl>
         </> : <>
