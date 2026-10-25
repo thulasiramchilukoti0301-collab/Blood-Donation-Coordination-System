@@ -1,5 +1,6 @@
 import { HttpError } from '../../utils/httpError.js';
 import { MAX_PASSWORD_UTF8_BYTES, validatePassword } from './passwordPolicy.js';
+import { validateHospitalDetails } from '../hospitals/validation.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 const MAX_UNSIGNED_BIGINT = 18446744073709551615n;
@@ -88,6 +89,32 @@ export function validateDonorRegistration(body, now = new Date()) {
   if (reportedBloodGroupId === undefined) fail({ reportedBloodGroupId: 'Choose a valid blood group identifier or leave it blank.' });
 
   return { fullName, email, password, dateOfBirth, phone, address, area, reportedBloodGroupId };
+}
+
+export function validateHospitalRegistration(body) {
+  objectBody(body);
+  rejectUnknownFields(body, new Set([
+    'email', 'password', 'organizationName', 'registrationNumber', 'contactName', 'phone', 'address',
+  ]));
+  const email = text(body, 'email', 254).toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) fail({ email: 'Enter a valid email address.' });
+  const password = body.password;
+  if (!validatePassword(password).valid) {
+    fail({ password: 'Use at least 8 characters, including a number and a punctuation or symbol character; maximum 72 UTF-8 bytes.' });
+  }
+  let details;
+  try {
+    details = validateHospitalDetails({
+      organizationName: body.organizationName, registrationNumber: body.registrationNumber ?? null,
+      contactName: body.contactName, phone: body.phone, address: body.address,
+    });
+  } catch (error) {
+    if (error instanceof HttpError && error.code === 'VALIDATION_ERROR') {
+      fail({ form: 'Enter valid Hospital organization and contact details.' });
+    }
+    throw error;
+  }
+  return { email, password, ...details };
 }
 
 export function validateLogin(body) {

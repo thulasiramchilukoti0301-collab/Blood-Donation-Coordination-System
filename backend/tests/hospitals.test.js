@@ -4,6 +4,7 @@ import { createHospitalRepository } from '../src/modules/hospitals/repository.js
 import { createHospitalService } from '../src/modules/hospitals/service.js';
 import { accountId, validateContactPatch, validateHospitalDetails, validateHospitalQuery } from '../src/modules/hospitals/validation.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
+import { HttpError } from '../src/utils/httpError.js';
 
 const principal = { accountId: '12' };
 const profile = { hospitalId: '12', organizationName: 'Example Hospital', registrationNumber: null,
@@ -203,26 +204,84 @@ test('duplicate registration and raw driver failures produce safe structured HTT
   await assert.rejects(service.getOwnProfile(principal), errorCode(503, 'DATABASE_UNAVAILABLE'));
 });
 
-test('repository transaction commits on success and always releases', async () => {
+test('repository transaction commits and releases exactly once on success without destroying', async () => {
   const events = [];
   const connection = { execute: async () => [[profile]], beginTransaction: async () => events.push('begin'),
-    commit: async () => events.push('commit'), rollback: async () => events.push('rollback'), release: () => events.push('release') };
+    commit: async () => events.push('commit'), rollback: async () => events.push('rollback'),
+    release: () => events.push('release'), destroy: () => events.push('destroy') };
   const repository = createHospitalRepository({ execute: async () => [], getConnection: async () => connection });
   assert.deepEqual(await repository.withTransaction((transaction) => transaction.findProfileByAccountId('12')), profile);
   assert.deepEqual(events, ['begin', 'commit', 'release']);
 });
 
-test('transaction failure, commit failure and rollback failure never expose driver details or leak connections', async () => {
-  for (const scenario of ['work', 'commit', 'rollback', 'begin']) {
+for (const { phase, rollbackFails, expected } of [
+  { phase: 'work', rollbackFails: false, expected: ['begin', 'work', 'rollback', 'release'] },
+  { phase: 'commit', rollbackFails: false, expected: ['begin', 'work', 'commit', 'rollback', 'release'] },
+  { phase: 'work', rollbackFails: true, expected: ['begin', 'work', 'rollback', 'destroy'] },
+  { phase: 'commit', rollbackFails: true, expected: ['begin', 'work', 'commit', 'rollback', 'destroy'] },
+  { phase: 'begin', rollbackFails: false, expected: ['begin', 'release'] },
+  { phase: 'acquire', rollbackFails: false, expected: [] },
+]) {
+  test(`transaction ${phase} failure with ${rollbackFails ? 'failed' : 'successful or unnecessary'} rollback cleans up once and returns a safe error`, async () => {
     const events = [];
-    const fail = () => { throw new Error('synthetic-sensitive-value'); };
-    const connection = { execute: async () => [], beginTransaction: async () => { events.push('begin'); if (scenario === 'begin') fail(); },
-      commit: async () => { events.push('commit'); if (scenario === 'commit') fail(); },
-      rollback: async () => { events.push('rollback'); if (scenario === 'rollback') fail(); }, release: () => events.push('release') };
+    const original = Object.assign(new Error('synthetic-sensitive-operation'), { sqlMessage: 'SELECT private-operation' });
+    const rollbackError = Object.assign(new Error('synthetic-sensitive-rollback'), { sqlMessage: 'SELECT private-rollback' });
+    const connection = {
+      execute: async () => [],
+      async beginTransaction() { events.push('begin'); if (phase === 'begin') throw original; },
+      async commit() { events.push('commit'); if (phase === 'commit') throw original; },
+      async rollback() { events.push('rollback'); if (rollbackFails) throw rollbackError; },
+      release() { events.push('release'); }, destroy() { events.push('destroy'); },
+    };
+    const repository = createHospitalRepository({ execute: async () => [], async getConnection() {
+      if (phase === 'acquire') throw original;
+      return connection;
+    } });
+    let failure;
+    await assert.rejects(repository.withTransaction(async () => {
+      events.push('work'); if (phase === 'work') throw original;
+    }), (error) => { failure = error; return errorCode(503, 'DATABASE_UNAVAILABLE')(error); });
+    assert.deepEqual(events, expected);
+    let body;
+    errorHandler(failure, {}, { status(status) { assert.equal(status, 503); return this; }, json(value) { body = value; } },
+      () => assert.fail('Unexpected next'));
+    assert.equal(body.error.code, 'DATABASE_UNAVAILABLE');
+    assert.doesNotMatch(JSON.stringify(body), /synthetic-sensitive|private-operation|private-rollback|SELECT|sqlMessage|stack/);
+  });
+}
+
+test('rollback failure preserves the original safe domain error and original driver conflict mapping', async () => {
+  const domainError = new HttpError(404, 'HOSPITAL_NOT_FOUND', 'Hospital profile was not found.');
+  const conflict = Object.assign(new Error('synthetic-sensitive-conflict'), {
+    code: 'ER_DUP_ENTRY', sqlMessage: "private value for key 'uq_hospital_registration_number'",
+  });
+  for (const original of [domainError, conflict]) {
+    const events = [];
+    const connection = { execute: async () => [], async beginTransaction() {}, async commit() { assert.fail('Unexpected commit'); },
+      async rollback() { events.push('rollback'); throw new Error('synthetic-sensitive-cleanup'); },
+      release() { events.push('release'); }, destroy() { events.push('destroy'); } };
     const repository = createHospitalRepository({ execute: async () => [], getConnection: async () => connection });
-    await assert.rejects(repository.withTransaction(async () => { if (scenario === 'work' || scenario === 'rollback') fail(); }),
-      errorCode(503, 'DATABASE_UNAVAILABLE'));
-    assert.equal(events.at(-1), 'release');
-    assert.equal(events.includes('rollback'), scenario !== 'begin');
+    await assert.rejects(repository.withTransaction(async () => { throw original; }), (error) => {
+      if (original === domainError) assert.strictEqual(error, domainError);
+      else assert.ok(errorCode(409, 'HOSPITAL_REGISTRATION_CONFLICT')(error));
+      assert.doesNotMatch(JSON.stringify(error), /synthetic-sensitive|private value|sqlMessage|stack/);
+      return true;
+    });
+    assert.deepEqual(events, ['rollback', 'destroy']);
   }
+});
+
+test('a destroy exception cannot replace the original safe failure or return the connection to the pool', async () => {
+  const original = new HttpError(404, 'HOSPITAL_NOT_FOUND', 'Hospital profile was not found.');
+  const events = [];
+  const connection = { execute: async () => [], async beginTransaction() {}, async commit() { assert.fail('Unexpected commit'); },
+    async rollback() { events.push('rollback'); throw new Error('synthetic-sensitive-rollback'); },
+    destroy() { events.push('destroy'); throw new Error('synthetic-sensitive-destroy'); },
+    release() { events.push('release'); } };
+  const repository = createHospitalRepository({ execute: async () => [], getConnection: async () => connection });
+  await assert.rejects(repository.withTransaction(async () => { throw original; }), (error) => {
+    assert.strictEqual(error, original);
+    return true;
+  });
+  assert.deepEqual(events, ['rollback', 'destroy']);
 });

@@ -1,6 +1,6 @@
 # Role Permissions
 
-The bounded authentication/Donor feature now implements public Donor registration, login/logout, current-account status, and read-only Donor self-profile access. The remaining permission matrix describes the approved broader application; only implemented routes listed in `api-design.md` are available in this milestone. Profile editing, account approval/suspension, password change, and operational actions remain unimplemented.
+The bounded authentication feature implements public Donor/Hospital registration, login/logout, current-account status, and read-only Donor self-profile access. Hospital registration atomically creates HOSPITAL/PENDING Account and Hospital rows without automatic login; see [its exact contract](hospital-registration-api.md). The bounded Hospital Profile integration mounts own-profile GET and contact-only PATCH for PENDING/ACTIVE Hospitals with shared session/current-account/HOSPITAL guards and PATCH CSRF. Admin Hospital Management adds ACTIVE ADMIN-only list/detail reads and Screen 24, including read-only display of each Hospital's current Account status. The remaining permission matrix describes the approved broader application; only implemented routes listed in `api-design.md` are available. Donor profile editing, shared account approval/suspension/reactivation, password change, and operational actions remain unimplemented. See [Hospital Profile integration](hospital-profile-api.md) and [Admin Hospital Management](admin-hospital-management.md).
 
 ## Permission principles
 
@@ -38,6 +38,8 @@ The broad Admin request-status permission does not resolve whether staff may can
 
 ## Admin-only operations
 
+The implemented Hospital management reads (`GET /api/admin/hospitals` and `GET /api/admin/hospitals/{hospitalId}`) require an authenticated current ACTIVE ADMIN. A PENDING or SUSPENDED target Hospital may be listed/viewed by that Admin; its state does not grant the target Hospital Admin permissions. DONOR/HOSPITAL sessions cannot use these reads. PENDING/SUSPENDED ADMIN accounts cannot establish or retain a permitted protected session. Client-supplied actor IDs, roles or status never replace the verified server Account. Screen 24 has no approve/suspend/reactivate controls: Thulasi's planned shared `GET /api/admin/accounts` and `PATCH /api/admin/accounts/{accountId}` workflow, required audit infrastructure and verified revocation remain dependencies. No Hospital-only Account update endpoint is authorized by this read integration.
+
 Only an ACTIVE Admin / Blood Bank Staff account may: approve/suspend/reactivate accounts; confirm blood group for operational use; make final day-of donor acceptance/deferral; record and correct completed donations; approve/reject testing; create, discard, expire, allocate, deallocate, or issue blood units; review/reject hospital requests; change request priority/status on behalf of workflow; edit blood-group/compatibility reference data; access audit logs and system-wide reports. Any correction, override, account-state change, or reactivation requires reason and audit event. Reactivation invalidates old sessions; the account must log in again.
 
 Hospital and Donor operational permissions in the matrix require `ACTIVE` account status. Pending users are limited to approval/status view, permitted own-profile read/update, password change, and logout. Suspended users cannot log in and have no valid protected requests; middleware/service logic checks current status on every request.
@@ -51,6 +53,7 @@ Hospitals cannot allocate units, view unit-level donor provenance, change staff 
 - Donors: name/identifier/contact, blood group, account status, eligibility/next eligible date, area.
 - Bookings/donations: donor, slot/date range, booking/donation status, donation outcome/testing status.
 - Inventory: blood group, exact unit ID, unit status, collection/expiry date range, available-only, expiry-soon.
+- Hospitals (implemented reads): organization name, registration number, contact name or phone; exact Account-status filter (`PENDING`, `ACTIVE`, `SUSPENDED`); positive page number, fixed 20-row pages. No email, credentials, request summaries or arbitrary Account lookup is exposed.
 - Hospital requests: hospital, request ID, status, priority, blood group, submitted/needed-by range, outstanding quantity.
 - Audit: actor, entity type/id, action, date range.
 

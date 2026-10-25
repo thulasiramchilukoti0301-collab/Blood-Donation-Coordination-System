@@ -1,0 +1,190 @@
+/* Mint Gauge belongs to Hospital Registration, Hospital Profile and Admin Hospital Management.
+   No unscoped element selector or Rose Quartz token is overridden here. */
+.mint-app-shell {
+  --mint-bg: #F1FAF6;
+  --mint-card: #FFFFFF;
+  --mint-alt: #E8F6F1;
+  --mint-border: #DDEFE8;
+  --mint-edge: #C5E3D8;
+  --mint-primary: #2FA58A;
+  --mint-strong: #1E8A71;
+  --mint-active: #D5ECE4;
+  --mint-secondary: #7C93E8;
+  --mint-ink: #1F3A33;
+  --mint-muted: #5C7A72;
+  --mint-faint: #8FA89F;
+  --mint-success: #46B37E;
+  --mint-warning: #F2B84B;
+  --mint-warning-text: #9A6B10;
+  --mint-warning-tint: #FBEBC8;
+  --mint-critical: #E5636D;
+  --mint-critical-text: #C0485A;
+  --mint-critical-tint: #FDE8EA;
+  --mint-normal: #5FBFA8;
+  --mint-issued: #5E8F83;
+  --mint-inactive: #B7C4BF;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--mint-bg);
+  color: var(--mint-ink);
+  font: 400 15px/1.65 "Nunito Sans", "Segoe UI", Arial, sans-serif;
+}
+.mint-app-shell h1, .mint-app-shell h2, .mint-app-shell h3, .mint-app-shell legend {
+  color: var(--mint-ink);
+  font-family: Sora, "Segoe UI", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.5px;
+}
+.mint-app-shell h1 { margin: 0 0 12px; font-size: clamp(25px, 3.3vw, 30px); line-height: 1.35; font-weight: 600; }
+.mint-app-shell h2 { margin: 0; font-size: 20px; line-height: 1.5; font-weight: 500; }
+.mint-app-shell p { overflow-wrap: anywhere; }
+.mint-header { border-bottom: 1px solid var(--mint-border); background: var(--mint-card); }
+.mint-header-inner, .mint-footer-inner {
+  width: 100%; max-width: 1200px; margin: 0 auto; padding: 20px clamp(20px, 4vw, 40px);
+  display: flex; justify-content: space-between; align-items: center; gap: 24px;
+}
+.mint-brand { display: inline-flex; align-items: center; gap: 12px; color: var(--mint-ink); font-size: 14px; font-weight: 800; line-height: 1.4; text-decoration: none; }
+.mint-brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: var(--mint-active); color: var(--mint-strong); font-size: 30px; line-height: 1; }
+.mint-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.mint-nav a, .mint-link-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 9px 16px; border-radius: 30px; color: var(--mint-strong); font-weight: 800; text-decoration: none; }
+.mint-nav a[aria-current="page"] { background: var(--mint-active); color: var(--mint-ink); }
+.mint-app-shell .mint-link-button { border: 1px solid var(--mint-border); background: transparent; font-size: 14px; }
+.mint-app-shell .mint-link-button:hover:enabled, .mint-nav a:hover { background: var(--mint-alt); border-color: var(--mint-edge); }
+.mint-main { flex: 1; width: 100%; max-width: 940px; margin: 0 auto; padding: 40px clamp(20px, 4vw, 40px) 56px; }
+.mint-main-wide { max-width: 1200px; }
+.mint-registration-header { max-width: 880px; margin: 0 auto 26px; }
+.mint-registration-header > p:last-child, .mint-page-subtitle { color: var(--mint-muted); margin: 0; max-width: 660px; }
+.mint-eyebrow { margin: 0 0 8px; color: var(--mint-strong); font-size: 12px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; }
+.mint-card { min-width: 0; padding: 30px; border: 1px solid var(--mint-border); border-radius: 18px; background: var(--mint-card); }
+.mint-registration-card { max-width: 880px; margin: 0 auto; }
+.mint-section-heading { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--mint-border); }
+.mint-section-heading > p { margin: 5px 0 0; color: var(--mint-muted); font-size: 13px; }
+.mint-form { display: grid; gap: 24px; }
+.mint-form-section, .mint-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.mint-form-section + .mint-form-section { padding-top: 24px; border-top: 1px solid var(--mint-border); }
+.mint-form-section legend { width: 100%; margin: 0 0 17px; padding: 0; font-size: 16px; font-weight: 600; }
+.mint-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 24px; }
+.mint-field { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.mint-field-full { grid-column: 1 / -1; }
+.mint-field label { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px 10px; color: var(--mint-ink); font-size: 14px; font-weight: 800; }
+.mint-required, .mint-optional { color: var(--mint-muted); font-size: 12px; font-weight: 500; }
+.mint-field input, .mint-field textarea {
+  width: 100%; min-width: 0; min-height: 46px; padding: 11px 13px; border: 1px solid var(--mint-edge);
+  border-radius: 10px; background: var(--mint-alt); color: var(--mint-ink); font: inherit; line-height: 1.5;
+}
+.mint-field textarea { min-height: 98px; resize: vertical; }
+.mint-field input::placeholder, .mint-field textarea::placeholder { color: var(--mint-faint); }
+.mint-field input[aria-invalid="true"], .mint-field textarea[aria-invalid="true"] { border-color: var(--mint-critical); }
+.mint-field input:disabled, .mint-field textarea:disabled { opacity: .7; }
+.mint-field-hint, .mint-field-note { margin: 0; color: var(--mint-muted); font-size: 13px; line-height: 1.6; }
+.mint-field-error { margin: 0; color: var(--mint-critical-text); font-size: 13px; font-weight: 700; }
+.mint-form-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding-top: 8px; }
+.mint-app-shell .mint-button, .mint-app-shell .mint-primary-button, .mint-app-shell .mint-secondary-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 11px 19px;
+  border: 1px solid var(--mint-edge); border-radius: 11px; font: 800 14px/1.5 "Nunito Sans", "Segoe UI", Arial, sans-serif;
+  text-align: center; text-decoration: none; cursor: pointer; transition: background-color .15s ease, border-color .15s ease;
+}
+.mint-app-shell .mint-primary-button, .mint-app-shell .mint-button-primary { color: var(--mint-card); background: var(--mint-strong); border-color: var(--mint-strong); }
+.mint-app-shell .mint-primary-button:hover:enabled, .mint-app-shell a.mint-primary-button:hover, .mint-app-shell .mint-button-primary:hover:enabled { color: var(--mint-card); background: var(--mint-ink); border-color: var(--mint-ink); }
+.mint-app-shell .mint-secondary-button, .mint-app-shell .mint-button-secondary { background: var(--mint-card); color: var(--mint-strong); }
+.mint-app-shell .mint-secondary-button:hover:enabled, .mint-app-shell .mint-button-secondary:hover:enabled { background: var(--mint-alt); color: var(--mint-ink); border-color: var(--mint-edge); }
+.mint-app-shell button:disabled { cursor: wait; opacity: .65; }
+.mint-app-shell :is(a, button, input, textarea):focus-visible { outline: 3px solid var(--mint-strong); outline-offset: 3px; }
+.mint-app-shell [tabindex="-1"]:focus { outline: 3px solid var(--mint-secondary); outline-offset: 5px; border-radius: 4px; }
+.mint-text-link { color: var(--mint-strong); font-weight: 800; text-underline-offset: 3px; }
+.mint-notice { display: grid; gap: 4px; margin: 0 0 22px; padding: 16px 18px; border: 1px solid var(--mint-edge); border-radius: 12px; font-size: 14px; line-height: 1.6; }
+.mint-notice p { margin: 5px 0 0; }
+.mint-notice-error { border-color: var(--mint-critical); background: var(--mint-critical-tint); color: var(--mint-critical-text); }
+.mint-notice-warning { border-color: var(--mint-warning); background: var(--mint-warning-tint); color: var(--mint-warning-text); }
+.mint-notice-success { border-color: var(--mint-success); background: var(--mint-alt); color: var(--mint-ink); }
+.mint-registration-success { max-width: 740px; margin: 16px auto; padding: clamp(24px, 5vw, 48px); }
+.mint-registration-success .mint-notice { margin-top: 24px; }
+.mint-success-mark { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 24px; border: 1px solid var(--mint-success); border-radius: 50%; color: var(--mint-strong); background: var(--mint-alt); font-size: 26px; }
+.mint-status-pill { display: inline-flex; align-items: center; width: fit-content; gap: 6px; border-radius: 30px; padding: 6px 12px; font-size: 12px; font-weight: 800; letter-spacing: .3px; line-height: 1.5; }
+.mint-status-pending { color: var(--mint-warning-text); background: var(--mint-warning-tint); }
+.mint-status-active { color: var(--mint-ink); background: var(--mint-active); }
+.mint-page-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 25px; }
+.mint-profile-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 24px; align-items: start; }
+.mint-card-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.mint-card-heading h2 { font-size: 18px; }
+.mint-readonly-label { padding: 4px 9px; border: 1px solid var(--mint-edge); border-radius: 6px; color: var(--mint-muted); font-size: 12px; }
+.mint-details { display: grid; gap: 0; margin: 0 0 20px; }
+.mint-detail { min-width: 0; padding: 15px 0; border-bottom: 1px solid var(--mint-border); }
+.mint-detail:first-child { padding-top: 0; }
+.mint-detail dt { color: var(--mint-muted); font-size: 13px; }
+.mint-detail dd { margin: 4px 0 0; color: var(--mint-ink); font-size: 15px; font-weight: 700; overflow-wrap: anywhere; white-space: pre-wrap; }
+.mint-muted, .mint-profile-caption { color: var(--mint-muted); }
+.mint-address { white-space: pre-wrap; }
+.mint-fieldset { display: grid; gap: 18px; }
+.mint-feedback-card { max-width: 880px; margin: 0 auto; }
+.mint-feedback-card p { color: var(--mint-muted); }
+.mint-profile-caption { margin: 22px 0 0; font-size: 13px; }
+.mint-status-suspended { color: var(--mint-critical-text); background: var(--mint-critical-tint); }
+.mint-admin-filters { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(170px, 1fr) auto; align-items: end; gap: 18px; }
+.mint-admin-filters .mint-field select {
+  width: 100%; min-height: 46px; padding: 11px 13px; border: 1px solid var(--mint-edge); border-radius: 10px;
+  color: var(--mint-ink); background: var(--mint-alt); font: inherit;
+}
+.mint-app-shell select:focus-visible { outline: 3px solid var(--mint-strong); outline-offset: 3px; }
+.mint-admin-filter-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.mint-admin-results, .mint-admin-feedback { margin-top: 24px; }
+.mint-admin-results-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 0 0 18px; }
+.mint-admin-results-heading p { margin: 0; color: var(--mint-muted); font-size: 13px; }
+.mint-admin-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--mint-border); border-radius: 12px; }
+.mint-admin-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+.mint-admin-table caption { text-align: left; }
+.mint-admin-table th { padding: 13px 16px; color: var(--mint-muted); background: var(--mint-alt); font-weight: 800; font-size: 12px; }
+.mint-admin-table td { padding: 16px; border-top: 1px solid var(--mint-border); vertical-align: top; overflow-wrap: anywhere; }
+.mint-admin-table tbody th { padding: 16px; border-top: 1px solid var(--mint-border); vertical-align: top; background: transparent; font-size: 14px; overflow-wrap: anywhere; }
+.mint-admin-table th:first-child, .mint-admin-table td:first-child { width: 32%; }
+.mint-admin-table th:last-child, .mint-admin-table td:last-child { text-align: right; }
+.mint-admin-table .mint-button { white-space: nowrap; }
+.mint-admin-organization { display: block; font-weight: 800; color: var(--mint-ink); }
+.mint-admin-registration { display: block; margin-top: 4px; color: var(--mint-muted); font-size: 13px; }
+.mint-admin-row-selected { background: var(--mint-alt); }
+.mint-admin-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 22px; }
+.mint-admin-pagination p { margin: 0; color: var(--mint-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.mint-admin-pagination > div { display: flex; align-items: center; gap: 10px; }
+.mint-admin-detail { margin-top: 28px; border-color: var(--mint-edge); }
+.mint-admin-detail-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.mint-admin-detail-heading p { margin-bottom: 0; color: var(--mint-muted); }
+.mint-admin-details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; margin: 0 0 22px; }
+.mint-admin-detail-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.mint-footer { border-top: 1px solid var(--mint-border); color: var(--mint-muted); font-size: 12px; }
+.mint-footer-inner { padding-top: 20px; padding-bottom: 20px; }
+.mint-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.hospital-registration-entry { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid #DDEFE8; font: 700 14px/1.6 "Nunito Sans", "Segoe UI", Arial, sans-serif; }
+.hospital-registration-entry a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: #1E8A71; text-underline-offset: 3px; }
+.hospital-registration-entry a:focus-visible { outline: 3px solid #1E8A71; outline-offset: 3px; }
+@media (max-width: 860px) {
+  .mint-profile-grid { grid-template-columns: minmax(0, 1fr); }
+  .mint-admin-filters { grid-template-columns: minmax(0, 1fr) minmax(160px, .8fr); }
+  .mint-admin-filter-actions { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .mint-main { padding-top: 28px; padding-bottom: 36px; }
+  .mint-card { padding: 22px 18px; border-radius: 14px; }
+  .mint-header-inner { align-items: flex-start; flex-wrap: wrap; gap: 14px; padding-top: 16px; padding-bottom: 16px; }
+  .mint-nav { gap: 7px; }
+  .mint-nav a, .mint-link-button { padding-right: 12px; padding-left: 12px; }
+  .mint-form-grid { grid-template-columns: minmax(0, 1fr); gap: 19px; }
+  .mint-form-actions { align-items: stretch; flex-direction: column; }
+  .mint-form-actions > :is(button, a) { width: 100%; }
+  .mint-footer-inner { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .mint-registration-success { margin-top: 0; }
+  .mint-admin-filters, .mint-admin-details-grid { grid-template-columns: minmax(0, 1fr); }
+  .mint-admin-table-wrap { border: 0; border-radius: 0; overflow: visible; }
+  .mint-admin-table, .mint-admin-table tbody, .mint-admin-table tr, .mint-admin-table tbody th, .mint-admin-table td { display: block; width: 100%; }
+  .mint-admin-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .mint-admin-table tr { margin-bottom: 16px; padding: 16px; border: 1px solid var(--mint-border); border-radius: 12px; }
+  .mint-admin-table tbody th, .mint-admin-table td { padding: 8px 0; border: 0; }
+  .mint-admin-table th:first-child, .mint-admin-table td:first-child { width: 100%; }
+  .mint-admin-table td:last-child { text-align: left; }
+  .mint-admin-table tbody th[data-label]::before, .mint-admin-table td[data-label]::before { display: block; margin-bottom: 3px; color: var(--mint-muted); content: attr(data-label); font-size: 12px; font-weight: 800; }
+  .mint-admin-table td:last-child::before { content: none; }
+  .mint-admin-pagination { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mint-app-shell *, .mint-app-shell *::before, .mint-app-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

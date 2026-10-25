@@ -1,6 +1,6 @@
 # UI Design Themes
 
-This document records three available visual theme options for the Blood Donation Coordination System. Theme assignment remains OPEN for every unimplemented screen in `ui-screen-map.md`; the user chooses each later page's theme. Rose Quartz Focus has been selected only for the implemented Login/registration, shared access/error, read-only Donor Profile, and account-status surfaces. Recommendations may favor Mint Gauge for quantities/status and Sky Pipeline for processes, but those recommendations are not assignments.
+This document records three available visual theme options for the Blood Donation Coordination System. The user has selected **Mint Gauge for Hospital Registration, Hospital Profile and Screen 24 Admin Hospital Management**, cancelling the prior Hospital Rose Quartz Focus choice. Hospital styles are scoped and do not change existing shared Login, Donor, access/error or account-status appearances. Other page themes have not been permanently assigned; the user chooses each later page's theme. Recommendations may favor Mint Gauge for quantities/status and Sky Pipeline for processes, but those recommendations are not assignments.
 
 ## Mint Gauge
 
@@ -24,6 +24,10 @@ This document records three available visual theme options for the Blood Donatio
 | Signature | Ring gauges, rounded cards, drawers, quiet status chips |
 | Charts | Rounded bars, teal primary, periwinkle comparison, faint gridlines, donut cutout around 78% |
 | Motion | Ring animation 600 ms, drawer 200 ms, subtle hover lift |
+
+For the bounded Hospital Registration/Profile and Admin Hospital Management milestones, use the exact Mint Gauge palette above, Sora headings and Nunito Sans body/UI. Deep teal `#1E8A71` is the solid primary-button background with white labels; do not use small white text on `#2FA58A`. Keep explicit status text, visible teal focus, comfortable touch targets, restrained transitions and reduced-motion support. The registration form uses grouped organization/contact/login fields; Profile uses saved organization details and a contact-only edit form. Screen 24 uses rounded white cards, soft mint borders, a responsive table, search/status filters, pagination and a profile details panel. Status chips include text; real Account status is read-only while shared approval APIs are absent. No approved numeric progress metric exists, so these screens have no fabricated gauges, approval percentages or dashboard statistics. Future priority/inventory/request colors remain reference specifications, not implemented features.
+
+Reuse the existing authenticated navigation and its placement: Hospital sessions have Hospital Profile, and ACTIVE ADMIN sessions have Hospital Management at `/admin/hospitals`. The optional Mint top-pill reference is not authorization for an application-wide navigation redesign or a second navigation bar. Hospital Registration remains a mode of the existing Login screen, not an extra top-level screen; Screen 24 details stay within its management page. See [Hospital frontend implementation](hospital-frontend.md) and [Admin Hospital Management contracts and verification](admin-hospital-management.md).
 
 ## Sky Pipeline
 
@@ -118,4 +122,4 @@ For the implemented Rose Quartz surfaces, contrast-safe action and muted text va
 
 Mint top pill tabs, Sky floating bottom dock, and Rose right icon rail are optional examples from the source reference, not three navigation prescriptions. Keep the same shared navigation placement and behavior across every theme. The final common navigation layout remains undecided.
 
-Before each later screen/page design or implementation task, recommend a theme suited to that page's purpose and let the user choose. Apply the user's choice to that page. Until the user makes that choice, its assignment remains OPEN; every cell in `ui-screen-map.md` is currently OPEN.
+Before each later screen/page design or implementation task, recommend a theme suited to that page's purpose and let the user choose. Apply the user's choice to that page. Hospital Registration/Profile and Screen 24 Admin Hospital Management are selected Mint Gauge surfaces; existing unrelated page appearances remain unchanged, and future page assignments remain OPEN until chosen by the user.

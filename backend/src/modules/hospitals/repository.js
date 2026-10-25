@@ -72,6 +72,7 @@ export function createHospitalRepository(database) {
     async withTransaction(work) {
       let connection;
       let began = false;
+      let rollbackFailed = false;
       try {
         connection = await database.getConnection();
         await connection.beginTransaction();
@@ -82,11 +83,18 @@ export function createHospitalRepository(database) {
         return result;
       } catch (error) {
         if (began) {
-          try { await connection.rollback(); } catch { throw safeHospitalError(); }
+          try { await connection.rollback(); } catch { rollbackFailed = true; }
         }
         throw safeHospitalError(error);
       } finally {
-        connection?.release();
+        // Never return an uncertain transaction to the pool. Keep the original
+        // operation's safe error instead of replacing it with a rollback error.
+        if (rollbackFailed) {
+          try { connection.destroy(); } catch {
+            // Disposal must not replace the original safe failure. Never try
+            // releasing this connection, including when destruction fails.
+          }
+        } else connection?.release();
       }
     },
   };
