@@ -6,8 +6,13 @@ import { createHealthRouter } from './routes/health.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { HttpError } from './utils/httpError.js';
 import { createAuthRuntime } from './modules/auth/router.js';
+import { createHospitalRouter } from './modules/hospitals/router.js';
 
-export function createApp({ verifyDatabase = verifyDatabaseConnection, authRuntime = createAuthRuntime() } = {}) {
+export function createApp({
+  verifyDatabase = verifyDatabaseConnection,
+  authRuntime = createAuthRuntime(),
+  hospitalRouter = createHospitalRouter(),
+} = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(cors({
@@ -24,6 +29,7 @@ export function createApp({ verifyDatabase = verifyDatabaseConnection, authRunti
   app.use('/api/health', createHealthRouter(verifyDatabase));
   if (authRuntime.middleware) app.use('/api', authRuntime.middleware);
   app.use('/api', authRuntime.router);
+  app.use('/api', hospitalRouter);
   app.use((req, res, next) => next(new HttpError(404, 'NOT_FOUND', 'API route not found.')));
   app.use(errorHandler);
   return app;

@@ -4,7 +4,7 @@ import { createAuthRepository } from './repository.js';
 import { createAuthService } from './service.js';
 import { createDonorRepository } from '../donors/repository.js';
 import { createDonorProfileService } from '../donors/service.js';
-import { validateDonorRegistration, validateLogin } from './validation.js';
+import { validateDonorRegistration, validateHospitalRegistration, validateLogin } from './validation.js';
 import { requireCurrentAccount, requireRole } from '../../middleware/auth.js';
 import { requireTrustedOriginAndCsrf } from '../../middleware/csrf.js';
 import { createRateLimiter } from '../../middleware/rateLimit.js';
@@ -21,7 +21,7 @@ function unavailableRouter() {
   router.use((req, res, next) => {
     const supported = (req.method === 'GET' && ['/auth/csrf', '/auth/me', '/donors/me'].includes(req.path))
       || (req.method === 'PATCH' && req.path === '/donors/me')
-      || (req.method === 'POST' && ['/auth/register/donors', '/auth/login', '/auth/logout'].includes(req.path));
+      || (req.method === 'POST' && ['/auth/register/donors', '/auth/register/hospitals', '/auth/login', '/auth/logout'].includes(req.path));
     if (!supported) return next();
     return next(new HttpError(
       503,
@@ -37,6 +37,7 @@ export function createAuthRouter({ authService, donorService, sessionStore, fron
   const csrf = requireTrustedOriginAndCsrf(frontendUrl);
   const loginLimiter = createRateLimiter();
   const registrationLimiter = createRateLimiter();
+  const hospitalRegistrationLimiter = createRateLimiter();
   const currentAccount = requireCurrentAccount(authService);
 
   router.get('/auth/csrf', (req, res, next) => {
@@ -52,6 +53,15 @@ export function createAuthRouter({ authService, donorService, sessionStore, fron
     try {
       const donor = validateDonorRegistration(req.body);
       const result = await authService.registerDonor(donor);
+      res.status(201).json({ success: true, ...result });
+    } catch (error) { next(error); }
+  });
+
+  router.post('/auth/register/hospitals', hospitalRegistrationLimiter, csrf, async (req, res, next) => {
+    try {
+      const hospital = validateHospitalRegistration(req.body);
+      const result = await authService.registerHospital(hospital);
+      res.set('Cache-Control', 'no-store');
       res.status(201).json({ success: true, ...result });
     } catch (error) { next(error); }
   });

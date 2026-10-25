@@ -32,6 +32,19 @@ export function createAuthService({ repository, passwordHasher = bcrypt, bcryptW
       catch (error) { throw databaseFailure(error); }
     },
 
+    async registerHospital(hospital) {
+      let passwordHash;
+      try {
+        passwordHash = await passwordHasher.hash(hospital.password, bcryptWorkFactor);
+      } catch {
+        throw new HttpError(503, 'AUTHENTICATION_UNAVAILABLE', 'Authentication is temporarily unavailable.');
+      }
+      const { password: discardedPassword, ...safeHospital } = hospital;
+      void discardedPassword;
+      try { return await repository.createHospitalAccountProfile({ ...safeHospital, passwordHash }); }
+      catch (error) { throw databaseFailure(error); }
+    },
+
     async authenticate(email, password) {
       try {
         const account = await repository.findAccountByEmail(email);

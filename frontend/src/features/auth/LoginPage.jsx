@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthLayout from './AuthLayout';
 import { useAuth } from './AuthProvider';
 import { registrationReportedGroupId, reportedBloodGroupChoices } from '../donors/bloodGroups';
+import HospitalRegistration from '../hospitals/HospitalRegistration';
+import { accountHome } from './accountHome';
 
 function apiError(error) {
   return error?.response?.data?.error;
@@ -15,6 +17,7 @@ function FieldError({ children }) {
 export default function LoginPage() {
   const { user, loading, restoreError, login, registerDonor } = useAuth();
   const navigate = useNavigate();
+  const [search] = useSearchParams();
   const [registerMode, setRegisterMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
@@ -24,8 +27,13 @@ export default function LoginPage() {
     fullName: '', email: '', password: '', dateOfBirth: '', phone: '', address: '', area: '', reportedBloodGroupId: '',
   });
 
+  if (search.get('register') === 'hospital') {
+    if (loading) return <AuthLayout theme="mint" wide><section className="mint-card mint-feedback-card" aria-busy="true"><p role="status">Checking your sign-in status…</p></section></AuthLayout>;
+    if (user) return <Navigate to={accountHome(user)} replace />;
+    return <HospitalRegistration />;
+  }
   if (loading) return <AuthLayout><section className="rose-card" aria-busy="true"><p role="status">Checking your sign-in status…</p></section></AuthLayout>;
-  if (user) return <Navigate to={user.role === 'DONOR' ? '/donor/profile' : '/account/status'} replace />;
+  if (user) return <Navigate to={accountHome(user)} replace />;
 
   const update = (field) => (event) => setValues((current) => ({ ...current, [field]: event.target.value }));
   const submit = async (event) => {
@@ -44,7 +52,7 @@ export default function LoginPage() {
       } else {
         const identity = await login({ email: values.email, password: values.password });
         setValues((current) => ({ ...current, password: '' }));
-        navigate(identity.role === 'DONOR' ? '/donor/profile' : '/account/status', { replace: true });
+        navigate(accountHome(identity), { replace: true });
       }
     } catch (error) {
       const detail = apiError(error);
@@ -58,11 +66,11 @@ export default function LoginPage() {
   return (
     <AuthLayout>
       <section className="auth-intro">
-        <p className="rose-eyebrow">Donor access</p>
+        <p className="rose-eyebrow">{registerMode ? 'Donor access' : 'Account access'}</p>
         <h1>{registerMode ? 'Create your account' : 'Welcome back'}</h1>
         <p>{registerMode
           ? 'Register as a donor. Your account will remain pending until reviewed by staff.'
-          : 'Sign in to view your account and donor profile.'}</p>
+          : 'Sign in to view your account and profile.'}</p>
       </section>
       <section className="rose-card auth-card" aria-labelledby="auth-form-title">
         <h2 id="auth-form-title">{registerMode ? 'Donor registration' : 'Sign in'}</h2>
@@ -113,6 +121,13 @@ export default function LoginPage() {
             {registerMode ? 'Sign in' : 'Create a donor account'}
           </button>
         </div>
+        <p className="hospital-registration-entry"><Link to="/login?register=hospital" onClick={() => {
+          setRegisterMode(false);
+          setValues((current) => ({ ...current, password: '' }));
+          setFormError('');
+          setFieldErrors({});
+          setSuccess('');
+        }}>Register a Hospital <span aria-hidden="true">↗</span></Link></p>
         <p className="auth-footnote"><Link to="/">Service connectivity</Link> · Password recovery is not available.</p>
       </section>
     </AuthLayout>

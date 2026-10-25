@@ -1,4 +1,6 @@
 import { HttpError } from '../../utils/httpError.js';
+import { createHospitalRepository } from '../hospitals/repository.js';
+import { safeHospitalError } from '../hospitals/errors.js';
 
 function requirePool(databasePool) {
   if (!databasePool) throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Database is not configured.');
@@ -77,6 +79,60 @@ export function createAuthRepository(databasePool) {
           }
           connection.release();
           if (rollbackFailed) throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database could not complete the request safely.');
+        }
+      }
+    },
+
+    async createHospitalAccountProfile(hospital) {
+      const database = requirePool(databasePool);
+      let connection;
+      let transactionStarted = false;
+      let committed = false;
+      try {
+        connection = await database.getConnection();
+        await connection.beginTransaction();
+        transactionStarted = true;
+        let accountResult;
+        try {
+          [accountResult] = await connection.execute(
+            `INSERT INTO Account (email, password_hash, role, account_status)
+             VALUES (?, ?, 'HOSPITAL', 'PENDING')`,
+            [hospital.email, hospital.passwordHash],
+          );
+        } catch (error) {
+          if (error?.code === 'ER_DUP_ENTRY') {
+            throw new HttpError(409, 'EMAIL_CONFLICT', 'An account with this email already exists.');
+          }
+          throw error;
+        }
+        const accountId = safeInsertId(accountResult.insertId);
+        try {
+          await connection.execute(
+            `INSERT INTO Hospital
+               (account_id, organization_name, registration_number, contact_name, phone, address)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [accountId, hospital.organizationName, hospital.registrationNumber,
+              hospital.contactName, hospital.phone, hospital.address],
+          );
+        } catch (error) { throw safeHospitalError(error); }
+        // Reuse the safe profile projection, on this same transaction connection.
+        const profile = await createHospitalRepository(connection).findProfileByAccountId(accountId);
+        if (!profile) throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database could not complete the request safely.');
+        await connection.commit();
+        committed = true;
+        return { accountId, hospitalId: accountId, accountStatus: 'PENDING', profile };
+      } finally {
+        if (connection) {
+          let rollbackFailed = false;
+          if (transactionStarted && !committed) {
+            try { await connection.rollback(); } catch { rollbackFailed = true; }
+          }
+          if (rollbackFailed) {
+            // Do not return a connection with an uncertain transaction to the pool.
+            connection.destroy();
+            throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database could not complete the request safely.');
+          }
+          connection.release();
         }
       }
     },

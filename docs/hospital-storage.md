@@ -9,17 +9,20 @@ Authored on branch `lathikaa` after confirming checkpoint `be0b775` is integrate
 | Hospital DDL and dedicated verifier | Authored; source reviewed |
 | Static checks | See the static verification record below |
 | Disposable MySQL verification | Not executed by Codex; requires separately authorized target |
-| Development schema | User reports existing migrations 001, 002 and 003 were applied and has now executed 004 on blood_donation_coordination; live Hospital metadata/results remain unchecked |
-| Development application of 004 | User-reported execution; not executed or independently verified by Codex. Do not rerun 004 |
-| Hospital registration, authorization, API and React UI | Repository/service preparation is authored; shared authentication integration and HTTP routes/UI remain pending; see the Hospital backend module README |
+| Development schema | Lathikaa reports 004 applied with Account, Hospital and app_session present in her environment's blood_donation_coordination, and has demonstrated real Hospital registration/login with correct saved PENDING Profile. Full metadata/constraint/failure/concurrency verification remains separate |
+| Development application of 004 | Lathikaa-environment user-reported execution; not executed or independently verified by Codex. Do not rerun 004 there |
+| Hospital Profile authorization/API | GET/PATCH `/api/hospitals/me` are mounted with shared session/current-account/HOSPITAL guards and PATCH CSRF. The original Profile checkpoint passed 70 isolated tests; later Admin-read checkpoint passed 108 backend/34 frontend tests. See [API contracts and read-only checks](hospital-profile-api.md) |
+| Hospital registration | POST `/api/auth/register/hospitals` is implemented atomically in shared auth. The original registration checkpoint passed 92 isolated backend tests. No development records were created by implementation/testing; Lathikaa's real registration in her environment is separate evidence. See [registration contract](hospital-registration-api.md) |
+| Hospital React UI | Registration, own Profile and Screen 24 Admin Hospital Management are implemented with scoped Mint Gauge, Sora headings and Nunito Sans body/controls; unrelated themes are preserved. No DDL, seeds or database-verifier changes are required |
+| Admin APIs/UI | GET `/api/admin/hospitals` and GET `/api/admin/hospitals/:hospitalId` plus Screen 24 are implemented for ACTIVE ADMIN. Real status remains read-only; live Admin verification and Thulasi's shared audited Account approval/status workflow remain pending. See [Admin contracts and dependencies](admin-hospital-management.md) |
 
 The eight columns match `database-design.md` and `relational-schema.md`. Hospital uses `account_id` as its non-generated shared PK and restrictive FK to Account, plus nullable unique `registration_number`. Text uses `utf8mb4_0900_ai_ci`; registration uniqueness therefore follows the existing case/accent-insensitive collation. Multiple NULL registration numbers are allowed. The timestamps default to current time; `updated_at` has no automatic update clause or trigger. Phone and organization name are not unique. NOT NULL does not reject empty strings; input normalization and business validation belong to later services.
 
-The FK establishes Account existence only. Account role matching, Donor/Hospital exclusivity, and atomic registration remain future shared service invariants. No other domain tables, permanent seeds, APIs, screens, shared configuration or dependency files are changed.
+The FK establishes Account existence only. Account role matching, Donor/Hospital exclusivity and atomic registration are shared service invariants rather than FK guarantees; the implemented registration service assigns HOSPITAL/PENDING and creates both rows transactionally. The original storage-only milestone changed no other domain tables, permanent seeds, APIs, screens, shared configuration or dependency files. Later Profile/registration/Admin-read integrations do not modify this DDL or its verifier. Thulasi's shared approval/status API requires durable AuditEvent infrastructure and verified CSRF/audit/revocation integration; no Hospital-only approval bypass is added.
 
 ## Development Workbench preflight (read-only)
 
-Current update: the user reports 004 has already been executed. Use the post-application metadata queries below to inspect it; do not repeat CREATE TABLE or the earlier absence preflight as an application gate. The original before/after instructions are retained as a reproduction reference, not as a request to rerun migrations.
+Current update: Lathikaa reports 004 has already been executed in her environment; Hospital presence in Thulasi's database is unverified. Use the post-application metadata queries below to inspect it; do not repeat CREATE TABLE or the earlier absence preflight as an application gate. The original before/after instructions are retained as a reproduction reference, not as a request to rerun migrations.
 
 Run these queries yourself on the intended local connection. They do not apply a migration. Confirm the schema name below is your intended development schema before selecting it. Do not run any setup wrapper or rerun 001, 002, 003 or reference data in this database.
 
@@ -51,9 +54,9 @@ SELECT EVENT_NAME, STATUS
 FROM information_schema.EVENTS WHERE EVENT_SCHEMA = DATABASE();
 ```
 
-Expected: Account and Donor are existing InnoDB tables; Account.account_id is `bigint unsigned`, NOT NULL, primary key. The Hospital query returns zero rows. Metadata is privilege-filtered: use an authorized schema inspection identity with adequate visibility. If prerequisites differ, Hospital exists, or visibility is insufficient, stop and inspect; do not recreate anything.
+For Lathikaa's user-reported installed schema, expect Account, Donor and Hospital to be existing InnoDB tables; Account.account_id is `bigint unsigned`, NOT NULL, primary key. The Hospital existence query should return its table row. Only the original pre-004 absence preflight expected zero rows; that historical gate does not apply to Lathikaa's installed database. Metadata is privilege-filtered: use an authorized schema inspection identity with adequate visibility. If prerequisites differ or visibility is insufficient, stop and inspect; do not recreate anything.
 
-After confirming Account and Donor exist, capture a before baseline in Workbench:
+For original installation reproduction, these queries captured a before baseline in Workbench; they remain safe read-only comparison checks on the installed schema:
 
 ```sql
 SHOW CREATE TABLE Account;
@@ -66,9 +69,9 @@ UNION ALL SELECT 'BloodGroup', COUNT(*) FROM BloodGroup;
 
 Save these result tabs locally. Also save definitions and exact COUNT results for any other tables already present, using their names from the object inventory. Do not select account data or credentials. Compare in a quiet local session without concurrent application mutations; counts alone do not prove every row is unchanged.
 
-## Development application (only after review and authorization)
+## Original development application reference (do not rerun locally)
 
-These are instructions, not a record of execution. After preflight, review the complete canonical `database/migrations/004_hospitals.sql`. In Workbench use **File > Open SQL Script**, open that file, and confirm `SELECT DATABASE()` is `blood_donation_coordination` on the same connection. Select and execute only the Hospital script. It contains one plain CREATE TABLE, no parent-table changes or data writes. Do not execute other open scripts. Check Action Output for success. If an error occurs, stop and inspect; never drop/recreate a table or rerun setup to recover.
+Lathikaa reports 004 is already installed in her environment; do not execute it again there. Hospital presence in Thulasi's database is unverified. These original instructions are retained only for separately reviewed/authorized reproduction in a schema lacking Hospital, not as a current setup step: review the complete canonical `database/migrations/004_hospitals.sql`, confirm the intended connection/schema and execute only that script. It contains one plain CREATE TABLE, no parent-table changes or data writes. Check Action Output before continuing. If an error occurs, stop and inspect; never drop/recreate a table or rerun setup to recover.
 
 DDL is not rolled back by the verifier's transaction. An existing Hospital table intentionally makes plain CREATE TABLE fail. Do not use IF NOT EXISTS to conceal drift.
 
@@ -92,7 +95,7 @@ SHOW INDEX FROM Hospital;
 SELECT COUNT(*) AS hospital_rows FROM Hospital;
 ```
 
-Expect exactly eight approved columns, no AUTO_INCREMENT or ON UPDATE, the PK on account_id, `uq_hospital_registration_number`, and `fk_hospital_account` with RESTRICT/RESTRICT. Hospital should contain zero rows immediately after this DDL-only application. Repeat the before-baseline queries and object inventory: previous definitions and counts should match, and Hospital should be the only added object. Never run the fixture verifier on development.
+Expect exactly eight approved columns, no AUTO_INCREMENT or ON UPDATE, the PK on account_id, `uq_hospital_registration_number`, and `fk_hospital_account` with RESTRICT/RESTRICT. Zero Hospital rows was expected immediately after the original DDL-only installation; it is not the expected current state after the user's successful real registration. Preserve all current records. The before/after object/count comparison applies to that original installation boundary. Never run the fixture verifier on development.
 
 ## Disposable verification setup (separate authorization required)
 
@@ -198,4 +201,4 @@ Executed on 2026-10-24 without reading private environment files or connecting t
 - Both documented PowerShell blocks passed PowerShell parser checks without execution.
 - `git diff --check`: passed; Git reported an LF/CRLF conversion warning for the migration, without whitespace errors.
 
-The initial sandbox Node invocation was blocked by filesystem EPERM; the database-free checks above subsequently passed under the authorized user context. An initial Python check could not start because Python was not available; the contract assertions were executed successfully using Node instead. No live SQL parser/server check, disposable database constraint test, database setup or development application has been executed. The verifier contains 21 negative SQL checks awaiting real disposable MySQL execution.
+The initial sandbox Node invocation was blocked by filesystem EPERM; the database-free checks above subsequently passed under the authorized user context. An initial Python check could not start because Python was not available; the contract assertions were executed successfully using Node instead. No live SQL parser/server check, disposable constraint test, database setup or development application was executed by Codex. Lathikaa's later 004 installation and real Hospital registration/login/PENDING Profile success in her environment are separate evidence; they do not establish all 21 negative checks in the dedicated disposable verifier, failure handling, concurrency or live Admin access.

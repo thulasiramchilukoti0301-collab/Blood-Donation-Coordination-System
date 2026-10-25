@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from './AuthProvider';
+import '../hospitals/hospital.css';
 
-export default function AuthLayout({ children, wide = false }) {
+export default function AuthLayout({ children, wide = false, theme = 'rose' }) {
   const { user, logout } = useAuth();
   const [logoutError, setLogoutError] = useState('');
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const mint = theme === 'mint';
+  const prefix = mint ? 'mint' : 'rose';
   const signOut = async () => {
     setLogoutBusy(true);
     setLogoutError('');
@@ -14,25 +17,28 @@ export default function AuthLayout({ children, wide = false }) {
     finally { setLogoutBusy(false); }
   };
   return (
-    <div className="rose-app-shell">
-      <header className="rose-header">
-        <div className="rose-header-inner">
-          <Link className="rose-brand" to="/" aria-label="Blood Donation Coordination System home">
-            <span className="rose-brand-mark" aria-hidden="true">+</span>
+    <div className={`${prefix}-app-shell`}>
+      {mint && <link rel="stylesheet" precedence="hospital-fonts" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700&display=swap" />}
+      <header className={`${prefix}-header`}>
+        <div className={`${prefix}-header-inner`}>
+          <Link className={`${prefix}-brand`} to="/" aria-label="Blood Donation Coordination System home">
+            <span className={`${prefix}-brand-mark`} aria-hidden="true">+</span>
             <span>Blood Donation<br />Coordination System</span>
           </Link>
-          <nav className="rose-nav" aria-label="Account navigation">
+          <nav className={`${prefix}-nav`} aria-label="Account navigation">
             {user ? <>
-              {user.role === 'DONOR'
+              {user.role === 'ADMIN' && user.accountStatus === 'ACTIVE'
+                ? <><Link to="/admin/hospitals" aria-current={mint ? 'page' : undefined}>Hospital management</Link><Link to="/account/status">Account status</Link></>
+                : user.role === 'HOSPITAL' ? <Link to="/hospital/profile" aria-current={mint ? 'page' : undefined}>Hospital Profile</Link> : user.role === 'DONOR'
                 ? <Link to="/donor/profile">My profile</Link>
                 : <Link to="/account/status">Account status</Link>}
-              <button className="rose-link-button" type="button" onClick={() => void signOut()} disabled={logoutBusy}>{logoutBusy ? 'Signing out…' : 'Sign out'}</button>
+              <button className={`${prefix}-link-button`} type="button" onClick={() => void signOut()} disabled={logoutBusy}>{logoutBusy ? 'Signing out…' : 'Sign out'}</button>
             </> : <Link to="/login">Sign in</Link>}
           </nav>
         </div>
       </header>
-      <main className={`rose-main${wide ? ' rose-main-wide' : ''}`}>{logoutError && <p className="notice notice-error" role="alert">{logoutError}</p>}{children}</main>
-      <footer className="rose-footer"><div className="rose-footer-inner">Academic DBMS Laboratory Project <span>Private account access</span></div></footer>
+      <main className={`${prefix}-main${wide ? ` ${prefix}-main-wide` : ''}`}>{logoutError && <p className={mint ? 'mint-notice mint-notice-error' : 'notice notice-error'} role="alert">{logoutError}</p>}{children}</main>
+      <footer className={`${prefix}-footer`}><div className={`${prefix}-footer-inner`}>Academic DBMS Laboratory Project <span>Private account access</span></div></footer>
     </div>
   );
 }
