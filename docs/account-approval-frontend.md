@@ -1,40 +1,46 @@
-# Admin Account approval frontend
+# Admin Account management frontend
 
 ## Implemented boundary
 
-The user selected **Mint Gauge** for the shared `/admin/accounts` supporting flow. Only restored, authenticated ACTIVE ADMIN identities may open it; signed-out users go to sign-in and other roles/states go to access denied. The existing Admin landing route remains `/admin/hospitals`. Header navigation keeps its placement and adds Account approvals beside Hospital management; active navigation is derived from the current route, including when both pages use Mint.
+The user selected **Mint Gauge** for the shared `/admin/accounts` supporting flow. The heading and navigation label are **Account management**. Only restored, authenticated ACTIVE ADMIN identities may open it; signed-out users go to sign-in and other roles/states go to access denied. The Admin landing route remains `/admin/hospitals`, and navigation stays in the shared header.
 
-Thulasi owns shared Account authentication/approval. Lathikaa retains Hospital/Audit ownership. Hospital list/detail reads and their read-only status display remain intact: this page uses the shared Account endpoints, not a Hospital-only mutation. It supports the account-approval portions of planned Donor Management and Hospital Management without adding a 31st baseline screen or implementing complete Donor Management. The later [suspension/reactivation backend extension](account-status-backend.md) adds no frontend controls; this page stays approval-only and ACTIVE/SUSPENDED rows remain read-only. Password change, donor corrections, blood-group confirmation, audit viewing, dashboards and other workflows remain unimplemented. Open cumulative PR #5, continuing personal branches and deferred main integration are unchanged.
+Thulasi owns shared Account authentication/status management. Lathikaa retains Hospital/Audit ownership. Hospital Management remains read-only and has no Hospital-only mutation. The existing Account supporting flow extends Screens 16/24 without adding a 31st screen or completing Donor Management. Password change, staff creation, donor corrections, group confirmation, audit viewing and operational workflows remain outside scope. Continuing personal branches, cumulative open PR #5 and deferred main integration are unchanged.
 
-## Queue and confirmation
+## Queue and exact actions
 
-- The existing credentialed Axios client calls `GET /api/admin/accounts`. Initial/Clear filters use PENDING, both roles and page 1. Both roles omits `role`; there is no ALL token or all-status option. Role options are DONOR/HOSPITAL; statuses are PENDING/ACTIVE/SUSPENDED.
-- Applied email search is trimmed after validating the backend's raw 254-code-point limit and control-character exclusion. Search/Clear resets page 1. Pagination uses the server's total and fixed 20-row pages; no synthetic records or totals are supplied.
-- Only Account ID, email, role, account status and created time enter the queue view. IDs remain decimal strings, including values beyond JavaScript's safe numeric range. Project-local `YYYY-MM-DD HH:mm:ss` timestamps are parsed with the explicit `+05:30` offset and displayed in Asia/Kolkata/India Standard Time.
-- Loading, empty, validation, safe failure/retry and success states are present. Only PENDING DONOR/HOSPITAL rows have Approve; ACTIVE/SUSPENDED rows are read-only.
-- Approve opens a labelled, non-modal confirmation region showing the selected ID, email and role, the fresh-sign-in consequence, and fixed reason **Registration reviewed**. Its heading receives focus. Cancel or Escape before submission closes it and restores trigger focus; no mutation is sent. Native form buttons remain keyboard accessible, with visible focus and announced progress/errors. Confirmation/Cancel are disabled during submission; navigation/filter changes can invalidate the view without undoing a dispatched transaction.
-- Confirm fetches fresh CSRF with `GET /api/auth/csrf`, validates its response, rechecks the current authentication lifecycle and selected query/page, then sends only the existing body below with `X-CSRF-Token`:
+The page retains the existing credentialed GET, email search, PENDING/Both roles defaults and Clear behavior, role/status filters, 20-row pagination, safe field projection, BIGINT decimal strings and explicit Asia/Kolkata/IST timestamps. Loading, empty, error/retry, responsive Mint/Sora/Nunito Sans styling, accessible labels and focus states are retained.
 
-```json
-{
-  "accountStatus": "ACTIVE",
-  "reason": "REGISTRATION_REVIEWED"
-}
-```
+Each DONOR/HOSPITAL row has exactly one source-state action, excluding self targets and Admin targets:
 
-`PATCH /api/admin/accounts/:accountId` receives no actor, role, email or extra fields. A synchronous submission guard prevents duplicate clicks and remains held across filter changes until the request settles. Success requires HTTP 200, `success: true`, the matching string Account ID and ACTIVE status; the UI never optimistically activates a row or invents an audit result.
+- PENDING: **Approve**, sending exactly `{ accountStatus: "ACTIVE", reason: "REGISTRATION_REVIEWED" }`.
+- ACTIVE: **Suspend**, sending exactly `{ accountStatus: "SUSPENDED", reason: "ACCESS_RESTRICTED" }`.
+- SUSPENDED: **Reactivate**, sending exactly `{ accountStatus: "ACTIVE", reason: "ACCESS_RESTORED" }`.
 
-Success reloads the real queue. If the last row disappears and its page is out of range, the page moves to the server-derived last page. A saved approval followed by a failed GET is explicitly shown as **approval saved / queue refresh failed**; retry reloads GET only. HTTP 409 ACCOUNT_APPROVAL_CONFLICT shows changed/stale state and refreshes without claiming this Admin approved it. Dispatched network/timeouts, TRANSACTION_OUTCOME_UNKNOWN and unconfirmed success payloads show an uncertain outcome and refresh for checking. PATCH is never retried automatically; a pending-looking row after uncertainty is not proof that a previous transaction failed.
+All use the existing PATCH `/api/admin/accounts/:accountId`. No actor, role, profile fields, arbitrary reason or new endpoint is sent. The legacy `approveAccount` service remains a fixed approval wrapper; it cannot reinterpret approval as reactivation. Backend authorization and transition checks remain authoritative.
 
-## Authentication lifecycle and stale requests
+## Confirmation and request lifecycle
 
-The shared AuthProvider exposes a lifecycle version and a current-ref accessor. Restored identities, login, logout and protected-session invalidation produce fresh scopes, including signing out and back into the same Account. The approval workspace is keyed by that version plus identity/role/status, clearing protected rows, confirmation, messages and drafts on replacement/unmount.
+A confirmation captures a frozen Account ID/email/role, source status and intended action. The named confirmation region displays that identity, exact source/destination, controlled reason code and consequence. Suspension ends existing sessions and prevents login; reactivation requires fresh login and never restores old sessions. Approval keeps its existing fresh-sign-in explanation. The heading receives focus; Cancel/Escape before submission closes the region, restores trigger focus and sends no mutation.
 
-Reads use AbortController and applied-filter/page/revision keys. Obsolete responses cannot populate a newer scope, and the current selection/lifecycle is rechecked after awaiting CSRF and immediately before PATCH. The existing version-aware session-invalidation interceptor remains in use: an older request's 401 cannot clear a newer login. Aborting obsolete reads/CSRF does not abort a dispatched mutation or roll back its server transaction; late mutation responses are ignored by obsolete workspaces.
+The page validates its captured selection against the current queue row and action. Fresh CSRF is fetched in the same shared-client auth lifecycle, and identity/selection/source/action are checked again immediately before dispatch. An obsolete confirmation is discarded, never changed into a different action. A backend source-state conflict refreshes the queue without claiming success.
 
-## Visual boundary
+One synchronous submission guard covers all actions and remains held across filter/page changes until a dispatched PATCH settles. Read/CSRF cancellation or an obsolete UI does not abort or undo that PATCH. Mutations are never automatically retried. Success requires HTTP 200, `success: true`, the selected string Account ID and the intended destination status. Only then does the page announce the specific saved action and reload the queue, correcting an out-of-range last page.
 
-Reuse the existing Mint viewport background `#F1FAF6`, white rounded cards, mint borders, `#1E8A71` primary buttons with white labels, Sora headings and Nunito Sans controls. Explicit status text, labelled filters, wrapping emails/IDs, scoped responsive table/cards, focus outlines and existing reduced-motion support are retained. No decorative gauges, invented metrics, UI dependencies or Rose Quartz restyling are added. At narrow/tablet widths the queue uses labelled stacked rows; navigation stays in the shared header.
+A confirmed save followed by failed refresh is explicitly shown as **Approval/Suspension/Reactivation was saved, but the queue could not be refreshed**. Retry performs GET only. ACCOUNT_APPROVAL_CONFLICT and ACCOUNT_STATUS_CONFLICT have safe conflict messages. Dispatched timeouts, unknown commits, malformed/mismatched success and server failures produce uncertain-outcome messages and read recovery. A matching current status is not proof this request caused the change; reading it never manufactures success or triggers a blind PATCH retry.
+
+## Authentication and stale responses
+
+The workspace remains keyed by auth lifecycle plus Account identity/role/status, including same-ID re-login. Logout and protected-401 invalidation clear rows, confirmations and notices. Obsolete reads, CSRF and mutation completions cannot populate a newer workspace, and an older identity's 401 cannot clear a newer login. A transient preflight 503 preserves identity and dispatches nothing. Existing shared Donor/Hospital authentication/profile flows are unchanged.
+
+## Verification of the status-control extension (2026-10-27)
+
+The automated checks use test-only API fixtures. The [earlier USER-RUN Donor cycle](account-status-backend.md#user-run-donor-status-cycle-evidence-reported-2026-10-27) used the browser Console; the later [USER-RUN page cycle](#user-run-account-management-ui-evidence-reported-2026-10-27) exercised these controls. Historical automated and USER-RUN evidence below retains its original scope. The final full frontend run passed **57 tests: 56 unit/service tests plus one real isolated Chrome suite; 0 failed, 0 skipped**. Twelve added unit/service tests exercise both roles and all exact actions, frozen confirmations, invalid targets/source pairs, delayed-CSRF cancellation/identity/source changes, expected-destination validation and safe conflict/uncertainty behavior. All prior approval, Hospital, Donor and shared-auth tests are retained.
+
+The browser suite passed **69 scenarios at each of four viewports**, with **460 assertions per viewport (1840 total)**: 1262 px desktop (1247 px content), 768/753 px tablet, 390/375 px phone and 337/322 px narrow mobile. It preserves the 40 earlier scenarios and adds 29 rendered status-control scenarios for role/action visibility, identity/transition/reason/consequence confirmations, Cancel/Escape/focus, exact CSRF/PATCH, duplicate guards across filters/pages, stale approval/source conflicts, success/refresh failure, conflict/timeout/unknown/malformed responses, same-ID re-login, old 401s and current-session cleanup. Labels and overflow are checked at all four widths.
+
+The first expanded browser run exposed Chrome rapid-history throttling during the increased fixture navigation volume: three retained Hospital navigation cases stalled on a blank intermediate route. Disabling the history IPC throttle only in each isolated temporary Chrome profile allowed all assertions to pass; no production Hospital/router behavior, test timeout or assertion was weakened. Test-only timeout diagnostics now identify the route and heading. The final full rerun after service cleanup passed with the counts above.
+
+Vite **8.3.4** production compilation passed for **106 modules**, with configFile:false, envDir:false and write:false; output remained in memory. The runner whitelisted OS environment settings and set NODE_ENV explicitly; DB variables and NODE_OPTIONS were excluded. Seven plain JavaScript syntax checks and git diff --check passed; JSX was compiled by Vite and the real browser harness. No backend tests were rerun. No private configuration was read, and no live API/MySQL operation was performed. These fixture/browser results do not establish live status-control behavior, audit counts, MySQL concurrency, rollback, multi-device revocation or the full security matrix.
 
 ## Automated verification (2026-10-26)
 
@@ -65,6 +71,17 @@ Repeated manual sign-ins also displayed the existing rate-limit warning. No back
 
 This is one live **Donor approval through the new UI**. It does not establish live Hospital approval through this UI; the earlier Hospital approval evidence used the browser Console. No personal profile values, credentials, session material or operation-ID values are recorded here.
 
+## USER-RUN Account management UI evidence (reported 2026-10-27)
+
+Source: observations supplied by the user, separate from the earlier [Console-driven Donor cycle](account-status-backend.md#user-run-donor-status-cycle-evidence-reported-2026-10-27), the 2026-10-26 approval-page observation and the automated results above. This documentation update did not run status changes, query MySQL or rerun tests. No exact execution time is claimed.
+
+- Admin opened Account management and filtered ACTIVE accounts. Cancelling Suspend left the test Donor ACTIVE.
+- Confirming Suspend succeeded and refreshed the ACTIVE queue. The Donor's previously open Incognito profile required sign-in, and login while suspended was refused.
+- Cancelling Reactivate left the Donor SUSPENDED. Confirming Reactivate succeeded; the old session remained signed out, and a fresh login displayed ACTIVE.
+- A read-only Workbench query showed ACCOUNT_SUSPENDED and ACCOUNT_REACTIVATED counts for that Account increasing from **one each before this UI cycle to two each afterward**. Both actions retained their approved ADMIN actors, reasons and transition summaries: ACCESS_RESTRICTED / `ACTIVE -> SUSPENDED` and ACCESS_RESTORED / `SUSPENDED -> ACTIVE`.
+
+This is one reported **Donor suspension/reactivation cycle through the Mint Account management page**. It does not verify Hospital controls, real concurrency, rollback, all-session/multi-device revocation or the broader security/API-tampering matrix. No personal identifiers, credentials or session material are recorded.
+
 ## Remaining manual verification
 
 The following remain pending; further live checks require separate authorization and appropriate intended/disposable data:
@@ -73,6 +90,6 @@ The following remain pending; further live checks require separate authorization
 - Live conflict, uncertainty, saved-approval/failed-refresh and authentication-race UI cases; do not blindly retry PATCH after an uncertain outcome.
 - Live Hospital approval through the shared UI, beyond the earlier Console evidence.
 - Real concurrent MySQL login/approval, expiry during MySQL lock waits, transaction failure/rollback, ambiguous commits, all-session/multi-device revocation and the broader security/API-tampering matrix.
-- Suspension/reactivation have the separately documented backend-only extension and [USER-RUN evidence reported 2026-10-27](account-status-backend.md#user-run-donor-status-cycle-evidence-reported-2026-10-27) for one Donor cycle through the Console, not through this page. Their frontend controls, Hospital cycle and further live checks remain pending; the Mint page is approval-only. Password change and other deferred workflows remain unimplemented.
+- Suspension/reactivation have the separately documented backend extension and two distinct reported Donor cycles: the earlier [Console cycle](account-status-backend.md#user-run-donor-status-cycle-evidence-reported-2026-10-27) and the later [page cycle](#user-run-account-management-ui-evidence-reported-2026-10-27). Hospital UI status controls and further live edge cases remain pending. Password change and other deferred workflows remain unimplemented.
 
-The existing backend authorization remains mandatory regardless of hidden UI actions. The stated Donor success, cancellation, empty queue, observed sign-in requirement and one-event count do not prove those pending guarantees or complete Phase 3, authentication, Feature 6 or the 30-screen baseline.
+The existing backend authorization remains mandatory regardless of hidden UI actions. The historical Donor approval success, cancellation, empty queue, observed sign-in requirement and one-event count, together with the later Donor status page cycle, do not prove those pending guarantees or complete Phase 3, authentication, Feature 6 or the 30-screen baseline.

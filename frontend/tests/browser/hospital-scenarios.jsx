@@ -7,6 +7,7 @@ import App from '../../src/App';
 import { api } from '../../src/services/api';
 import '../../src/styles/global.css';
 import { runAccountApprovalScenarios } from './account-approval-scenarios';
+import { runAccountStatusScenarios } from './account-status-scenarios';
 
 const container = document.getElementById('hospital-test-app');
 const report = document.getElementById('hospital-test-result');
@@ -39,7 +40,7 @@ function assert(condition, message) { checks += 1; if (!condition) throw new Err
 async function waitFor(condition, message, timeout = 3000) {
   const started = performance.now();
   while (!condition()) {
-    if (performance.now() - started > timeout) throw new Error(`Timed out: ${message}`);
+    if (performance.now() - started > timeout) throw new Error(`Timed out: ${message}; route=${location.pathname}${location.search}; heading=${container.querySelector('h1')?.textContent ?? 'none'}`);
     await pause(5);
   }
 }
@@ -72,6 +73,7 @@ async function mount(path, options = {}) {
         : errorResponse(config, 401, 'AUTHENTICATION_REQUIRED', 'Sign in to continue.');
     }
     if (config.url === '/auth/csrf') {
+      if (current.statusCsrfFailure) { current.statusCsrfFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'PRIVATE'); }
       if (current.holdApprovalCsrf) { current.holdApprovalCsrf = false; await new Promise(resolve => { current.releaseApprovalCsrf = resolve; }); }
       return response(config, { success: true, csrfToken: (++current.csrf).toString(16).padStart(64, '0') });
     }
@@ -88,13 +90,20 @@ async function mount(path, options = {}) {
       if (current.holdApproval) { current.holdApproval = false; await new Promise(resolve => { current.releaseApproval = resolve; }); }
       if (current.oldApprovalUnauthorized) return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Old session is unavailable.');
       const row = current.approvalAccounts.find(row => row.accountId === config.url.split('/').at(-1));
-      if (current.approvalMode === 'conflict') { if (row) row.accountStatus = 'ACTIVE'; return errorResponse(config, 409, 'ACCOUNT_APPROVAL_CONFLICT', 'Account changed.'); }
-      if (row) row.accountStatus = 'ACTIVE';
+      const mappings = { REGISTRATION_REVIEWED: ['PENDING', 'ACTIVE'], ACCESS_RESTRICTED: ['ACTIVE', 'SUSPENDED'], ACCESS_RESTORED: ['SUSPENDED', 'ACTIVE'] };
+      const transition = mappings[data?.reason];
+      if (!row) return errorResponse(config, 404, 'ACCOUNT_NOT_FOUND', 'Missing account.');
+      if (!transition || Object.keys(data).length !== 2 || data.accountStatus !== transition[1]) return errorResponse(config, 400, 'VALIDATION_ERROR', 'Invalid fixture action.');
+      const conflict = data.reason === 'REGISTRATION_REVIEWED' ? 'ACCOUNT_APPROVAL_CONFLICT' : 'ACCOUNT_STATUS_CONFLICT';
+      if (current.approvalMode === 'conflict') { row.accountStatus = transition[1]; return errorResponse(config, 409, conflict, 'Account changed.'); }
+      if (row.accountStatus !== transition[0]) return errorResponse(config, 409, conflict, 'Account source changed.');
+      row.accountStatus = transition[1];
       if (current.approvalMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
       if (current.approvalMode === 'unknown') return errorResponse(config, 503, 'TRANSACTION_OUTCOME_UNKNOWN', 'PRIVATE transaction detail');
-      if (current.approvalMode === 'malformed') return response(config, { success: true, accountId: 'invalid', accountStatus: 'ACTIVE' });
+      if (current.approvalMode === 'malformed') return response(config, { success: true, accountId: 'invalid', accountStatus: transition[1] });
+      if (current.approvalMode === 'wrong-status') return response(config, { success: true, accountId: row.accountId, accountStatus: transition[0] });
       if (current.failRefreshAfterApproval) { current.failRefreshAfterApproval = false; current.queueFailures = 1; }
-      return response(config, { success: true, accountId: row.accountId, accountStatus: 'ACTIVE' });
+      return response(config, { success: true, accountId: row.accountId, accountStatus: transition[1] });
     }
     if (config.url.startsWith('/admin/hospitals')) {
       if (current.expireAdmin) { current.user = null; return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session.'); }
@@ -179,6 +188,8 @@ async function run(name, work) {
 
 async function scenarios() {
   await runAccountApprovalScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
+    container, adminUser, hospitalUser, run });
+  await runAccountStatusScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
     container, adminUser, hospitalUser, run });
   await run('ACTIVE Admin list, Mint styling, pagination, scoped navigation and approved data only', async () => {
     await mount('/admin/hospitals', { user: adminUser() });

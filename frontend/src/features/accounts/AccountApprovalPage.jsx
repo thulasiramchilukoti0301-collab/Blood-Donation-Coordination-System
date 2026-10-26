@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import AuthLayout from '../auth/AuthLayout';
 import { useAuth } from '../auth/AuthProvider';
-import { approveAccount, listAccounts } from '../../services/accounts';
+import { changeAccountStatus, listAccounts } from '../../services/accounts';
 import {
-  ACCOUNT_ROLES, ACCOUNT_STATUSES, DEFAULT_FILTERS, accountApprovalError, accountPages,
+  ACCOUNT_ACTIONS, ACCOUNT_ROLES, ACCOUNT_STATUSES, DEFAULT_FILTERS, accountAction, captureAccountAction, accountApprovalError, accountPages,
   accountTimestamp, canApproveAccounts, validateAccountFilters,
 } from './accountApprovals';
 import './accounts.css';
@@ -24,13 +24,13 @@ export default function AccountApprovalPage() {
   if (!canApproveAccounts(user)) return <Navigate to="/unauthorized" replace />;
   // A fresh same-ID login gets a new workspace, not an old directory/confirmation.
   return <AccountWorkspace key={`${authLifecycle}:${user.accountId}:${user.role}:${user.accountStatus}`}
-    version={authLifecycle} getAuthLifecycle={getAuthLifecycle} />;
+    actorId={user.accountId} version={authLifecycle} getAuthLifecycle={getAuthLifecycle} />;
 }
 
-function AccountWorkspace({ version, getAuthLifecycle }) {
+function AccountWorkspace({ actorId, version, getAuthLifecycle }) {
   const [draft, setDraft] = useState({ ...DEFAULT_FILTERS });
   const [errors, setErrors] = useState({});
-  const [request, setRequest] = useState({ filters: { ...DEFAULT_FILTERS }, page: 1, revision: 0, outcome: null });
+  const [request, setRequest] = useState({ filters: { ...DEFAULT_FILTERS }, page: 1, revision: 0, outcome: null, savedAction: null });
   const [list, setList] = useState({ key: null, state: 'loading', data: null, message: '' });
   const [selection, setSelection] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -47,7 +47,12 @@ function AccountWorkspace({ version, getAuthLifecycle }) {
   const noticeElement = useRef(null);
   const trigger = useRef(null);
   scope.current = key;
-  const currentSelection = selection?.key === key ? selection : null;
+  const selectedRow = list.key === key && list.state === 'ready'
+    ? list.data.accounts.find(account => account.accountId === selection?.account.accountId) : null;
+  const currentSelection = selection?.key === key && selectedRow
+    && ['accountId', 'role', 'email', 'accountStatus'].every(field => selectedRow[field] === selection.account[field])
+    && accountAction(selectedRow, actorId)?.key === selection.action ? selection : null;
+  const selectedAction = currentSelection ? ACCOUNT_ACTIONS[currentSelection.action] : null;
   selected.current = currentSelection;
   const current = (expectedKey) => alive.current && scope.current === expectedKey && getAuthLifecycle() === version;
 
@@ -70,8 +75,10 @@ function AccountWorkspace({ version, getAuthLifecycle }) {
       setList({ key, state: 'ready', data, message: '' });
     }).catch((error) => {
       if (controller.signal.aborted || !current(key)) return;
+      const savedNoun = ACCOUNT_ACTIONS[request.savedAction]?.noun ?? 'account change';
+      const savedLabel = savedNoun[0].toUpperCase() + savedNoun.slice(1);
       const message = request.outcome === 'saved'
-        ? 'Approval was saved, but the queue could not be refreshed. Try again to reload the queue; do not resubmit the approval.'
+        ? `${savedLabel} was saved, but the queue could not be refreshed. Try again to reload the queue; do not resubmit the account action.`
         : error?.response?.status === 403 ? 'An active Admin account is required to read this queue. Check your sign-in status.'
           : 'The account queue is temporarily unavailable. Try again to reload it.';
       setList({ key, state: 'error', data: null, message });
@@ -107,20 +114,21 @@ function AccountWorkspace({ version, getAuthLifecycle }) {
     event.preventDefault();
     const choice = selected.current;
     if (!choice || operation.current || !current(choice.key)) return;
-    const token = Symbol('approval');
+    const action = ACCOUNT_ACTIONS[choice.action];
+    const token = Symbol('account-action');
     operation.current = token;
     setBusy(true);
     const controller = new AbortController();
     preflight.current = controller;
     const isCurrent = () => current(choice.key) && selected.current === choice && operation.current === token;
     try {
-      await approveAccount(choice.account.accountId, { signal: controller.signal, isCurrent });
+      await changeAccountStatus(choice, { signal: controller.signal, isCurrent });
       if (!isCurrent()) return;
-      setNotice({ kind: 'success', message: `Account ${choice.account.accountId} was approved. It is ACTIVE and requires fresh sign-in.` });
-      changeRequest({ outcome: 'saved' }, { keepNotice: true });
+      setNotice({ kind: 'success', message: `Account ${choice.account.accountId} was ${action.past}. It is ${action.to}. ${action.explanation}` });
+      changeRequest({ outcome: 'saved', savedAction: action.key }, { keepNotice: true });
     } catch (error) {
       if (!isCurrent()) return;
-      const result = accountApprovalError(error);
+      const result = accountApprovalError(error, action);
       if (result.kind === 'obsolete') return;
       setNotice(result);
       clearSelection();
@@ -138,11 +146,11 @@ function AccountWorkspace({ version, getAuthLifecycle }) {
 
   return <AuthLayout theme="mint" wide>
     <header className="mint-page-heading"><div><p className="mint-eyebrow">Admin workspace</p>
-      <h1 ref={heading} tabIndex={-1}>Account approvals</h1>
-      <p className="mint-page-subtitle">Review Donor and Hospital registrations. Only pending accounts can be approved here.</p></div></header>
+      <h1 ref={heading} tabIndex={-1}>Account management</h1>
+      <p className="mint-page-subtitle">Approve pending registrations, suspend active accounts or reactivate suspended Donor and Hospital accounts.</p></div></header>
     {notice && <div ref={noticeElement} tabIndex={-1} className={`mint-notice mint-notice-${notice.kind === 'success' ? 'success' : notice.kind === 'error' ? 'error' : 'warning'}`}
       role={notice.kind === 'success' ? 'status' : 'alert'}>{notice.message}</div>}
-    {busy && !currentSelection && <p className="mint-notice" role="status">An approval request is still in progress. Changing filters does not cancel it.</p>}
+    {busy && !currentSelection && <p className="mint-notice" role="status">An account action is still in progress. Changing filters does not cancel it.</p>}
     <section className="mint-card" aria-labelledby="account-filter-heading">
       <h2 id="account-filter-heading">Find accounts</h2>
       <form className="mint-admin-filters mint-account-filters" onSubmit={search} ref={form} noValidate>
@@ -167,16 +175,17 @@ function AccountWorkspace({ version, getAuthLifecycle }) {
     </section>
     {currentSelection && <section className="mint-card mint-account-confirm" role="region" aria-labelledby="approval-confirm-heading"
       onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); clearSelection(true); } }}>
-      <h2 id="approval-confirm-heading" ref={confirmationHeading} tabIndex={-1}>Confirm account approval</h2>
+      <h2 id="approval-confirm-heading" ref={confirmationHeading} tabIndex={-1}>Confirm account {selectedAction.noun}</h2>
       <dl className="mint-details"><div className="mint-detail"><dt>Account ID</dt><dd>{currentSelection.account.accountId}</dd></div>
         <div className="mint-detail"><dt>Email</dt><dd>{currentSelection.account.email}</dd></div>
         <div className="mint-detail"><dt>Role</dt><dd>{currentSelection.account.role}</dd></div></dl>
-      <p>Approval activates this account and requires the user to sign in again.</p>
-      <p><strong>Reason:</strong> Registration reviewed</p>
+      <p><strong>Transition:</strong> {currentSelection.sourceStatus} &rarr; {selectedAction.to}</p>
+      <p>{selectedAction.explanation}</p>
+      <p><strong>Reason:</strong> {selectedAction.reasonLabel} ({selectedAction.reason})</p>
       <form onSubmit={confirm} aria-busy={busy}>
-        <div className="mint-admin-filter-actions"><button className="mint-button mint-button-primary" type="submit" disabled={busy}>{busy ? 'Approving…' : 'Confirm approval'}</button>
+        <div className="mint-admin-filter-actions"><button className="mint-button mint-button-primary" type="submit" disabled={busy}>{busy ? `${selectedAction.progress}…` : `Confirm ${selectedAction.noun}`}</button>
           <button className="mint-button mint-button-secondary" type="button" disabled={busy} onClick={() => clearSelection(true)}>Cancel</button></div>
-        {busy && <p role="status">Submitting approval. Please wait; do not submit again.</p>}
+        {busy && <p role="status">Submitting {selectedAction.noun}. Please wait; do not submit again.</p>}
       </form>
     </section>}
     {state === 'loading' && <Feedback title="Loading accounts" message="Retrieving the account queue…" busy />}
@@ -186,22 +195,22 @@ function AccountWorkspace({ version, getAuthLifecycle }) {
         ? `${(request.page - 1) * 20 + 1}–${(request.page - 1) * 20 + data.accounts.length} of ${data.pagination.total} accounts`
         : `${data.pagination.total} accounts match these filters`}</p></div>
       {data.accounts.length ? <div className="mint-admin-table-wrap" tabIndex={0} role="region" aria-label="Account results">
-        <table className="mint-admin-table mint-account-table"><caption className="mint-sr-only">Donor and Hospital account approvals. Created times are India Standard Time.</caption>
+        <table className="mint-admin-table mint-account-table"><caption className="mint-sr-only">Donor and Hospital account management. Created times are India Standard Time.</caption>
           <thead><tr>{['Account ID', 'Email', 'Role', 'Account status', 'Created (IST)', 'Action'].map(label => <th scope="col" key={label}>{label}</th>)}</tr></thead>
           <tbody>{data.accounts.map(account => <tr key={account.accountId}>
             <th scope="row" data-label="Account ID">{account.accountId}</th><td data-label="Email">{account.email}</td><td data-label="Role">{account.role}</td>
             <td data-label="Account status"><span className={`mint-status-pill mint-status-${account.accountStatus.toLowerCase()}`}>{account.accountStatus}</span></td>
             <td data-label="Created (IST)"><time dateTime={accountTimestamp(account.createdAt).iso}>{accountTimestamp(account.createdAt).label}</time></td>
-            <td data-label="Action">{account.accountStatus === 'PENDING' ? <button className="mint-button mint-button-secondary" type="button" disabled={busy}
-              aria-label={`Approve account ${account.accountId}`} onClick={event => {
-                trigger.current = event.currentTarget; const choice = { account, key }; selected.current = choice; setSelection(choice); setNotice(null);
-              }}>Approve</button> : <span className="mint-muted">Read-only</span>}</td>
+            <td data-label="Action">{accountAction(account, actorId) ? <button className="mint-button mint-button-secondary" type="button" disabled={busy}
+              aria-label={`${accountAction(account, actorId).label} account ${account.accountId}`} onClick={event => {
+                trigger.current = event.currentTarget; const choice = Object.freeze({ ...captureAccountAction(account, actorId), key }); selected.current = choice; setSelection(choice); setNotice(null);
+              }}>{accountAction(account, actorId).label}</button> : <span className="mint-muted">Read-only</span>}</td>
           </tr>)}</tbody></table></div> : <div className="mint-feedback-card"><h3>No accounts found</h3><p>Try another email, role or status, or clear the filters.</p></div>}
       <nav className="mint-admin-pagination" aria-label="Account result pages"><p>Page {request.page} of {pages}</p><div>
         <button className="mint-button mint-button-secondary" disabled={request.page <= 1} onClick={() => changeRequest({ page: request.page - 1, outcome: null })}>Previous</button>
         <button className="mint-button mint-button-secondary" disabled={request.page >= pages} onClick={() => changeRequest({ page: request.page + 1, outcome: null })}>Next</button>
       </div></nav>
-      <p className="mint-field-note">Created times are shown in India Standard Time (Asia/Kolkata). ACTIVE and SUSPENDED accounts are read-only.</p>
+      <p className="mint-field-note">Created times are shown in India Standard Time (Asia/Kolkata). Review the transition and sign-in consequences before confirming an account action.</p>
     </section>}
   </AuthLayout>;
 }

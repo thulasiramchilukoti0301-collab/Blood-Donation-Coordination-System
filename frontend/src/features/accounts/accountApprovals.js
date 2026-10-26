@@ -1,6 +1,26 @@
 export const ACCOUNT_STATUSES = Object.freeze(['PENDING', 'ACTIVE', 'SUSPENDED']);
 export const ACCOUNT_ROLES = Object.freeze(['DONOR', 'HOSPITAL']);
 export const DEFAULT_FILTERS = Object.freeze({ role: '', accountStatus: 'PENDING', search: '' });
+export const ACCOUNT_ACTIONS = Object.freeze(Object.fromEntries([
+  ['APPROVE', 'PENDING', 'ACTIVE', 'REGISTRATION_REVIEWED', 'Approve', 'approval', 'approved', 'Approving',
+    'Registration reviewed', 'Approval activates this account and requires the user to sign in again.'],
+  ['SUSPEND', 'ACTIVE', 'SUSPENDED', 'ACCESS_RESTRICTED', 'Suspend', 'suspension', 'suspended', 'Suspending',
+    'Access restricted', 'Suspension ends existing sessions and prevents login while the account is suspended.'],
+  ['REACTIVATE', 'SUSPENDED', 'ACTIVE', 'ACCESS_RESTORED', 'Reactivate', 'reactivation', 'reactivated', 'Reactivating',
+    'Access restored', 'Reactivation requires fresh login. It does not restore old sessions.'],
+].map(([key, from, to, reason, label, noun, past, progress, reasonLabel, explanation]) =>
+  [key, Object.freeze({ key, from, to, reason, label, noun, past, progress, reasonLabel, explanation })])));
+
+export function accountAction(account, actorId) {
+  if (!isAccountId(account?.accountId) || account.accountId === actorId || !ACCOUNT_ROLES.includes(account.role)) return null;
+  return Object.values(ACCOUNT_ACTIONS).find(action => action.from === account.accountStatus) ?? null;
+}
+export function captureAccountAction(account, actorId) {
+  const action = accountAction(account, actorId);
+  if (!action) throw new Error('Choose a permitted account action.');
+  return Object.freeze({ action: action.key, sourceStatus: account.accountStatus,
+    account: Object.freeze({ accountId: account.accountId, email: account.email, role: account.role, accountStatus: account.accountStatus }) });
+}
 
 export function isAccountId(value) {
   return typeof value === 'string' && /^[1-9][0-9]{0,19}$/u.exec(value)?.[0] === value
@@ -56,17 +76,18 @@ export function readAccountPage(input, expectedPage) {
   return { accounts, pagination: { page: p.page, pageSize: 20, total: p.total } };
 }
 export function accountPages(p) { return Math.max(1, Math.ceil(p.total / 20)); }
-export function accountApprovalError(error) {
+export function accountApprovalError(error, action = ACCOUNT_ACTIONS.APPROVE) {
   if (error?.code === 'OBSOLETE_APPROVAL') return { kind: 'obsolete', message: '' };
   const status = error?.response?.status;
   const code = error?.response?.data?.error?.code;
-  if (status === 409 && code === 'ACCOUNT_APPROVAL_CONFLICT') return { kind: 'conflict',
-    message: 'This account changed before approval. The queue is being refreshed; no approval by you is confirmed.' };
-  if (error?.code === 'APPROVAL_OUTCOME_UNKNOWN' || (error?.approvalDispatched
+  const noun = action.noun;
+  if (status === 409 && ['ACCOUNT_APPROVAL_CONFLICT', 'ACCOUNT_STATUS_CONFLICT'].includes(code)) return { kind: 'conflict',
+    message: `This account changed before ${noun}. The queue is being refreshed; no ${noun} by you is confirmed.` };
+  if (['APPROVAL_OUTCOME_UNKNOWN', 'ACCOUNT_STATUS_OUTCOME_UNKNOWN'].includes(error?.code) || ((error?.approvalDispatched || error?.statusDispatched)
     && (!error.response || status >= 500 || code === 'TRANSACTION_OUTCOME_UNKNOWN'))) return { kind: 'uncertain',
-    message: 'The approval outcome could not be confirmed. Check the refreshed queue before deciding what to do next. Do not submit the approval again without checking.' };
+    message: `The ${noun} outcome could not be confirmed. Check the refreshed queue before deciding what to do next. A matching status does not prove this request caused the change. Do not submit the ${noun} again without checking.` };
   if (status === 401) return { kind: 'error', message: 'Your sign-in must be checked again.' };
-  if (status === 403) return { kind: 'error', message: 'Approval was not authorized. Check your Admin access and try again with a fresh confirmation.' };
-  if (status === 400 || status === 404) return { kind: 'error', message: 'The account or approval input was not accepted. Refresh the queue and review the selected account.' };
-  return { kind: 'error', message: 'Approval could not be submitted. Refresh the queue and try again with a fresh confirmation.' };
+  if (status === 403) return { kind: 'error', message: 'The account action was not authorized. Check your Admin access and try again with a fresh confirmation.' };
+  if (status === 400 || status === 404) return { kind: 'error', message: 'The account or action input was not accepted. Refresh the queue and review the selected account.' };
+  return { kind: 'error', message: 'The account action could not be submitted. Refresh the queue and try again with a fresh confirmation.' };
 }

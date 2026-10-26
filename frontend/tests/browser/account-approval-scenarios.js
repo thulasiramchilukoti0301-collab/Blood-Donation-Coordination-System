@@ -75,9 +75,9 @@ export async function runAccountApprovalScenarios(h) {
     assert(!container.querySelector('.mint-account-table'), 'No invented empty rows');
     button('Clear filters').click(); await waitFor(() => rows().length === 20, 'clear defaults');
     assert(container.querySelector('[name=role]').value === '' && container.querySelector('[name=accountStatus]').value === 'PENDING', 'Clear restores both roles/PENDING');
-    await fill({ accountStatus: 'ACTIVE' }); await submit(); await waitFor(() => text().includes('Read-only'), 'ACTIVE queue');
+    await fill({ accountStatus: 'ACTIVE' }); await submit(); await waitFor(() => button('Suspend'), 'ACTIVE queue');
     assert(!button('Approve') && queueCalls(f).at(-1).params.accountStatus === 'ACTIVE', 'ACTIVE has no approval');
-    await fill({ accountStatus: 'SUSPENDED' }); await submit(); await waitFor(() => text().includes('SUSPENDED') && text().includes('Read-only'), 'SUSPENDED queue');
+    await fill({ accountStatus: 'SUSPENDED' }); await submit(); await waitFor(() => text().includes('SUSPENDED') && button('Reactivate'), 'SUSPENDED queue');
     assert(!button('Approve'), 'SUSPENDED has no approval'); noOverflow();
   });
   await run('queue failure is safe and retried only as GET', async () => {
