@@ -1,0 +1,20 @@
+/* Shared Account approvals reuse Mint Gauge without changing Hospital/Rose rules. */
+.mint-account-filters { grid-template-columns: minmax(0, 1.5fr) minmax(120px, .7fr) minmax(150px, .8fr); }
+.mint-account-filters .mint-admin-filter-actions { grid-column: 1 / -1; }
+.mint-account-confirm { margin-top: 24px; border-color: var(--mint-edge); }
+.mint-account-confirm h2 { margin-bottom: 20px; }
+.mint-account-table { table-layout: fixed; }
+.mint-account-table th:first-child { width: 16%; }
+.mint-account-table th:nth-child(2) { width: 24%; }
+.mint-account-table th:last-child { width: 14%; }
+.mint-account-table td, .mint-account-table th { overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .mint-account-table, .mint-account-table tbody, .mint-account-table tr, .mint-account-table tbody th, .mint-account-table td { display: block; width: 100%; }
+  .mint-account-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .mint-account-table tr { margin-bottom: 16px; padding: 16px; border: 1px solid var(--mint-border); border-radius: 12px; }
+  .mint-account-table tbody th, .mint-account-table td { padding: 8px 0; border: 0; }
+  .mint-account-table th:first-child { width: 100%; }
+  .mint-account-table td:last-child { text-align: left; }
+  .mint-account-table tbody th[data-label]::before, .mint-account-table td[data-label]::before { display: block; margin-bottom: 3px; color: var(--mint-muted); content: attr(data-label); font-size: 12px; font-weight: 800; }
+}
+@media (max-width: 600px) { .mint-account-filters { grid-template-columns: minmax(0, 1fr); } }

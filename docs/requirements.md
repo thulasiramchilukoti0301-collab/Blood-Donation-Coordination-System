@@ -6,7 +6,7 @@ This document turns the approved project scope into requirements for the college
 
 ## Current bounded Account implementation
 
-The [shared Account backend](account-approval-backend.md) now implements ACTIVE ADMIN queue and controlled DONOR/HOSPITAL PENDING -> ACTIVE approval, with atomic status/audit/session tombstones and revalidated login persistence. Only the approval action/reason mapping is resolved. Separate USER-RUN Console approval/audit/fresh-login evidence dated 2026-10-26 is recorded in that guide; further live concurrency/failure/security and all-session/multi-device checks remain pending. Frontend approval controls, suspension/reactivation, password change and other deferred features remain unimplemented. The broader requirements below do not imply those features are implemented.
+The [shared Account backend](account-approval-backend.md) now implements ACTIVE ADMIN queue and controlled DONOR/HOSPITAL PENDING -> ACTIVE approval, with atomic status/audit/session tombstones and revalidated login persistence. Only the approval action/reason mapping is resolved. Separate USER-RUN Console approval/audit/fresh-login evidence dated 2026-10-26 is recorded in that guide; further live concurrency/failure/security and all-session/multi-device checks remain pending. The bounded [Mint approval frontend](account-approval-frontend.md) is now implemented through the existing contracts. Separate USER-RUN Donor UI evidence is recorded in that guide; live Hospital approval, multi-page/mobile/tablet and edge-case frontend checks remain pending; suspension/reactivation, password change and other deferred features remain unimplemented. The broader requirements below do not imply those features are implemented.
 
 ## Product requirements
 

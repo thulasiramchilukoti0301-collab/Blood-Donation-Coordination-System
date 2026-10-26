@@ -23,7 +23,10 @@ export function AuthProvider({ children }) {
     setRestoreError('');
     try {
       const { data } = await api.get('/auth/me');
-      if (startedAtVersion === authVersion.current) setUser(data.user);
+      if (startedAtVersion === authVersion.current) {
+        authVersion.current += 1;
+        setUser(data.user);
+      }
     } catch (error) {
       if (!isSessionInvalidation(error) && startedAtVersion === authVersion.current) {
         setRestoreError(error?.response?.data?.error?.message || 'Could not check your sign-in status.');
@@ -34,6 +37,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => { void restore(); }, [restore]);
+
+  // Ref access closes the interval before React renders a login/logout change.
+  // Consumers also receive the version as a render key, including same-ID login.
+  const getAuthLifecycle = useCallback(() => authVersion.current, []);
 
   const getCsrfToken = useCallback(async (signal) => {
     const { data } = await api.get('/auth/csrf', { signal });
@@ -70,8 +77,9 @@ export function AuthProvider({ children }) {
     setRestoreError('');
   }, [getCsrfToken]);
 
-  const value = useMemo(() => ({ user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore }),
-    [user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore]);
+  const authLifecycle = authVersion.current;
+  const value = useMemo(() => ({ user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore, authLifecycle, getAuthLifecycle }),
+    [user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore, authLifecycle, getAuthLifecycle]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
