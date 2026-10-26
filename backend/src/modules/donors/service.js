@@ -15,7 +15,7 @@ function safeFailure(error, patch) {
 export function createDonorProfileService({ repository }) {
   if (!repository) throw new TypeError('A donor repository is required.');
   return {
-    async updateOwnProfile(accountId, body) {
+    async updateOwnProfile(accountId, body, authorization) {
       const patch = validateDonorProfilePatch(body);
       try {
         return await repository.withTransaction(async (transaction) => {
@@ -25,6 +25,7 @@ export function createDonorProfileService({ repository }) {
             || !['PENDING', 'ACTIVE'].includes(account.account_status)) {
             throw new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session. Sign in again if the account is active.');
           }
+          await transaction.authorizeSession(authorization, account);
           if (!await transaction.findDonorForUpdate(accountId)) {
             throw new HttpError(503, 'DONOR_PROFILE_UNAVAILABLE', 'The donor profile is unavailable.');
           }

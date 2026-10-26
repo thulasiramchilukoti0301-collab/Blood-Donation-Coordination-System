@@ -32,3 +32,18 @@ export function validateApproval(body) {
     || body.reason !== 'REGISTRATION_REVIEWED') throw invalid();
   return { accountStatus: 'ACTIVE', reason: 'REGISTRATION_REVIEWED' };
 }
+
+const transitions = Object.freeze({
+  REGISTRATION_REVIEWED: Object.freeze({ from: 'PENDING', to: 'ACTIVE', action: 'ACCOUNT_APPROVED',
+    reason: 'REGISTRATION_REVIEWED', summary: 'PENDING -> ACTIVE', conflict: 'ACCOUNT_APPROVAL_CONFLICT' }),
+  ACCESS_RESTRICTED: Object.freeze({ from: 'ACTIVE', to: 'SUSPENDED', action: 'ACCOUNT_SUSPENDED',
+    reason: 'ACCESS_RESTRICTED', summary: 'ACTIVE -> SUSPENDED', conflict: 'ACCOUNT_STATUS_CONFLICT' }),
+  ACCESS_RESTORED: Object.freeze({ from: 'SUSPENDED', to: 'ACTIVE', action: 'ACCOUNT_REACTIVATED',
+    reason: 'ACCESS_RESTORED', summary: 'SUSPENDED -> ACTIVE', conflict: 'ACCOUNT_STATUS_CONFLICT' }),
+});
+export function validateAccountTransition(body) {
+  object(body, ['accountStatus', 'reason']);
+  if (Reflect.ownKeys(body).length !== 2 || !Object.hasOwn(transitions, body.reason)
+    || body.accountStatus !== transitions[body.reason].to) throw invalid();
+  return transitions[body.reason];
+}

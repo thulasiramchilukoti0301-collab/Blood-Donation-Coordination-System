@@ -1,5 +1,6 @@
 import { HttpError } from '../../utils/httpError.js';
 import { createAuthRepository } from '../auth/repository.js';
+import { requireStoredSession } from '../accounts/sessionAuthorization.js';
 
 const editableColumns = Object.freeze({
   fullName: 'full_name',
@@ -15,11 +16,17 @@ export function createDonorRepository(databasePool) {
     async withTransaction(work) {
       let connection;
       let started = false;
+      let rollbackFailed = false;
       try {
         connection = await databasePool.getConnection();
         await connection.beginTransaction();
         started = true;
         const transaction = {
+          authorizeSession(authorization, account) {
+            return requireStoredSession(connection, authorization, {
+              accountId: String(account.account_id), role: account.role, accountStatus: account.account_status,
+            });
+          },
           async findAccountForUpdate(accountId) {
             const [rows] = await connection.execute(
               `SELECT CAST(account_id AS CHAR) AS account_id, role, account_status
@@ -64,13 +71,24 @@ export function createDonorRepository(databasePool) {
       } catch (error) {
         if (started) {
           try { await connection.rollback(); }
-          catch { throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database could not complete the request safely.'); }
+          catch {
+            rollbackFailed = true;
+            throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database could not complete the request safely.');
+          }
         }
         throw error;
       } finally {
         if (connection) {
-          try { connection.release(); }
-          catch { throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database could not complete the request safely.'); }
+          if (rollbackFailed) {
+            // Never release an uncertain transaction, even if disposal fails.
+            try { connection.destroy(); } catch { /* Keep cleanup diagnostics private. */ }
+          } else {
+            try { connection.release(); }
+            catch {
+              try { connection.destroy(); } catch { /* Never retry release after failed disposal. */ }
+              throw new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database could not complete the request safely.');
+            }
+          }
         }
       }
     },

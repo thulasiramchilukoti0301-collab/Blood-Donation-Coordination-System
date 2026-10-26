@@ -14,7 +14,7 @@ export function createAccountAdminRouter({ authService, accountService, frontend
   router.patch('/admin/accounts/:accountId', noStore, ...guards, requireTrustedOriginAndCsrf(frontendUrl), async (req, res, next) => {
     try {
       if (Object.keys(req.query).length) throw new HttpError(400, 'VALIDATION_ERROR', 'Account query or approval input is invalid.');
-      const result = await accountService.approve(req.authAccount.accountId, req.params.accountId, req.body);
+      const result = await accountService.changeStatus(req.authAccount.accountId, req.params.accountId, req.body, req.authSession);
       res.json({ success: true, ...result });
     } catch (error) { next(error); }
   });

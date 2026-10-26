@@ -1,4 +1,5 @@
 import { HttpError } from '../utils/httpError.js';
+import { sessionAuthorization } from '../modules/accounts/sessionAuthorization.js';
 
 function destroySession(req) {
   return new Promise((resolve, reject) => {
@@ -16,7 +17,8 @@ export function requireCurrentAccount(authService) {
       return next(new HttpError(401, 'AUTHENTICATION_REQUIRED', 'Sign in to continue.'));
     }
     try {
-      const account = await authService.currentAccount(claimed.accountId);
+      const authorization = sessionAuthorization(req.sessionID, claimed);
+      const account = await authService.authorizeSession(authorization.sessionId, authorization.principal);
       const statusPermitted = account?.accountStatus === 'ACTIVE'
         || (account?.accountStatus === 'PENDING' && ['DONOR', 'HOSPITAL'].includes(account.role));
       if (!account || account.role !== claimed.role || account.accountStatus !== claimed.accountStatus || !statusPermitted) {
@@ -24,8 +26,12 @@ export function requireCurrentAccount(authService) {
         return next(new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session. Sign in again if the account is active.'));
       }
       req.authAccount = account;
+      Object.defineProperty(req, 'authSession', { value: authorization, enumerable: false });
       return next();
     } catch (error) {
+      if (error?.status === 401 && error.code === 'ACCOUNT_UNAVAILABLE') {
+        try { await destroySession(req); } catch (cleanupError) { return next(cleanupError); }
+      }
       return next(error);
     }
   };

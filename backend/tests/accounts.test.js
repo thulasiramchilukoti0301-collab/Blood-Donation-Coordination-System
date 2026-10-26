@@ -11,6 +11,7 @@ import { createApp } from '../src/app.js';
 import { environment } from '../src/config/environment.js';
 import { requireCurrentAccount } from '../src/middleware/auth.js';
 import { accountDatabase, approvalPassword } from './helpers/account-database.mjs';
+import { testAuthorization, testSessionRow } from './helpers/session-context.mjs';
 
 const body = { accountStatus: 'ACTIVE', reason: 'REGISTRATION_REVIEWED' };
 const uuid = '11111111-2222-4333-8444-555555555555';
@@ -19,7 +20,14 @@ const callStore = (store, method, ...args) => new Promise((resolve, reject) =>
 function fixture() {
   const database = accountDatabase();
   const store = new MysqlSessionStore(database, 60_000);
-  const service = createAccountAdminService({ repository: createAccountAdminRepository(database), sessionStore: store, operationId: () => uuid });
+  // Unit actor sessions are disposable fixtures, separate from target logins.
+  for (const id of ['1', '30']) {
+    const authorization = testAuthorization(id, 'ADMIN', 'ACTIVE');
+    database.sessions.set(authorization.sessionId, testSessionRow(authorization));
+  }
+  const actualService = createAccountAdminService({ repository: createAccountAdminRepository(database), sessionStore: store, operationId: () => uuid });
+  const service = { ...actualService, approve: (actor, target, input) => actualService.changeStatus(actor, target, input,
+    testAuthorization(actor, 'ADMIN', 'ACTIVE')) };
   const auth = createAuthService({ repository: createAuthRepository(database), passwordHasher: { async compare() { return true; } } });
   let nextSession = 0;
   const login = (id, beforePersist = async () => {}) => auth.establishSession(`${id}@example.test`, approvalPassword,
@@ -37,6 +45,12 @@ function safe(error, code) {
   return true;
 }
 function deferred() { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; }
+function assertNoDurableLogin(fixture, before, targetId, ...sessionIds) {
+  assert.deepEqual(fixture.database.sessions, before, 'Existing fixture sessions must remain unchanged.');
+  for (const id of sessionIds) assert.equal(fixture.database.sessions.has(id), false, 'No attempted login SID may become durable.');
+  assert.ok([...fixture.database.sessions.values()].every(row => JSON.parse(row.session_data)?.auth?.accountId !== targetId),
+    'No session for the target Account may become durable.');
+}
 
 test('approval validation accepts only the exact bounded body, canonical IDs and queue fields/defaults', () => {
   assert.deepEqual(validateApproval(body), body);
@@ -61,7 +75,7 @@ for (const id of ['10', '20']) test(`approval of ${id === '10' ? 'Donor' : 'Hosp
   const transactionCalls = f.database.calls.filter((c) => c.sql.startsWith('UPDATE Account') || c.sql.startsWith('UPDATE app_session SET session_data = NULL') || c.sql.startsWith('INSERT INTO AuditEvent'));
   assert.equal(new Set(transactionCalls.map((c) => c.connection)).size, 1);
   assert.ok(transactionCalls.every((c) => c.connection !== null));
-  const locks = f.database.calls.filter((c) => c.connection === transactionCalls[0].connection && c.sql.includes('FOR UPDATE'));
+  const locks = f.database.calls.filter((c) => c.connection === transactionCalls[0].connection && c.sql.includes('FROM Account') && c.sql.includes('FOR UPDATE'));
   assert.deepEqual(locks.map((c) => c.values[0]), [id, '30']);
   await assert.rejects(f.service.approve('30', id, body), (e) => safe(e, 'ACCOUNT_APPROVAL_CONFLICT'));
   assert.equal(f.database.audits.length, 1);
@@ -122,11 +136,12 @@ test('queue defaults to PENDING, excludes Admin, escapes literal search, and ord
 
 test('login before approval is durable under the Account lock, then its pending SID is revoked and cannot be upgraded or recreated', async () => {
   const f = fixture();
+  const before = structuredClone(f.database.sessions);
   const entered = deferred(); const release = deferred();
   const pendingLogin = f.login('10', async () => { entered.resolve(); await release.promise; });
   await entered.promise;
   const approval = f.service.approve('1', '10', body);
-  assert.equal(f.database.sessions.size, 0, 'Uncommitted login storage is not durable yet.');
+  assertNoDurableLogin(f, before, '10', 'isolated-session-1');
   assert.equal(f.database.accounts.get('10').accountStatus, 'PENDING');
   release.resolve();
   assert.equal((await pendingLogin).accountStatus, 'PENDING');
@@ -144,6 +159,7 @@ test('login before approval is durable under the Account lock, then its pending 
 test('verification before approval is rechecked after locking: fresh post-approval session allowed, changed credentials/role denied', async () => {
   for (const change of ['approve', 'hash', 'email', 'role', 'suspend']) {
     const f = fixture();
+    const before = structuredClone(f.database.sessions);
     const verified = deferred(); const continueLogin = deferred();
     const auth = createAuthService({ repository: createAuthRepository(f.database), passwordHasher: {
       async compare() { verified.resolve(); await continueLogin.promise; return true; },
@@ -157,7 +173,10 @@ test('verification before approval is rechecked after locking: fresh post-approv
       : change === 'email' ? { email: 'other@example.test' } : change === 'role' ? { role: 'HOSPITAL' } : { accountStatus: 'SUSPENDED' });
     continueLogin.resolve();
     if (change === 'approve') assert.equal((await login).accountStatus, 'ACTIVE');
-    else { await assert.rejects(login, (e) => safe(e, 'INVALID_CREDENTIALS')); assert.equal(f.database.sessions.size, 0); }
+    else {
+      await assert.rejects(login, (e) => safe(e, 'INVALID_CREDENTIALS'));
+      assertNoDurableLogin(f, before, '10', 'fresh');
+    }
   }
 });
 
@@ -266,12 +285,13 @@ test('an in-flight pending or legacy session loaded before approval is denied by
 });
 
 test('session insertion failure rolls login back, while ordinary set can never establish authentication', async () => {
-  const f = fixture(); f.database.failures.add('session-insert');
+  const f = fixture(); const before = structuredClone(f.database.sessions);
+  f.database.failures.add('session-insert');
   await assert.rejects(f.login('10'), (e) => safe(e, 'SESSION_STORAGE_UNAVAILABLE'));
-  assert.equal(f.database.sessions.size, 0);
+  assertNoDurableLogin(f, before, '10', 'isolated-session-1');
   f.database.failures.clear();
   await callStore(f.store, 'set', 'not-a-login', { auth: { accountId: '10', role: 'DONOR', accountStatus: 'PENDING' } });
-  assert.equal(f.database.sessions.size, 0);
+  assertNoDurableLogin(f, before, '10', 'isolated-session-1', 'not-a-login');
   assert.equal(f.database.audits.length, 0);
 });
 

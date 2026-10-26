@@ -5,14 +5,21 @@ import { createHospitalService } from '../src/modules/hospitals/service.js';
 import { accountId, validateContactPatch, validateHospitalDetails, validateHospitalQuery } from '../src/modules/hospitals/validation.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 import { HttpError } from '../src/utils/httpError.js';
+import { requireStoredSession } from '../src/modules/accounts/sessionAuthorization.js';
+import { testAuthorization, testSessionRow } from './helpers/session-context.mjs';
 
-const principal = { accountId: '12' };
+const principal = { accountId: '12', session: testAuthorization('12', 'HOSPITAL', 'ACTIVE') };
 const profile = { hospitalId: '12', organizationName: 'Example Hospital', registrationNumber: null,
   contactName: 'Contact', phone: '+91 12345', address: 'Example address', accountStatus: 'ACTIVE' };
 const errorCode = (status, code) => (error) => error.status === status && error.code === code;
 function mockRepository(overrides = {}) {
   const calls = [];
   const repository = {
+    async authorizeSession(authorization, account) {
+      calls.push(['session']);
+      return requireStoredSession({ execute: async () => [[testSessionRow(principal.session)]] }, authorization,
+        { ...account, accountId: principal.accountId });
+    },
     async findAccountById(id, options) { calls.push(['account', id, options]); return { accountId: id, role: 'HOSPITAL', accountStatus: 'ACTIVE' }; },
     async findProfileByAccountId(id, options) { calls.push(['profile', id, options]); return { ...profile, hospitalId: id }; },
     async updateContactProfile(id, patch) { calls.push(['update', id, patch]); return { ...profile, ...patch }; },
@@ -105,10 +112,11 @@ test('own update validates first, locks/rechecks Account and updates only allowe
   const { service, calls } = mockRepository();
   const result = await service.updateOwnProfile(principal, { contactName: ' Updated ', phone: '123' });
   assert.equal(result.contactName, 'Updated');
-  assert.deepEqual(calls.map(([name]) => name), ['account', 'transaction', 'account', 'profile', 'update']);
+  assert.deepEqual(calls.map(([name]) => name), ['account', 'transaction', 'account', 'session', 'profile', 'update']);
   assert.deepEqual(calls[2], ['account', '12', { forUpdate: true }]);
-  assert.deepEqual(calls[3], ['profile', '12', { forUpdate: true }]);
-  assert.deepEqual(calls[4], ['update', '12', { contactName: 'Updated', phone: '123' }]);
+  assert.deepEqual(calls[3], ['session']);
+  assert.deepEqual(calls[4], ['profile', '12', { forUpdate: true }]);
+  assert.deepEqual(calls[5], ['update', '12', { contactName: 'Updated', phone: '123' }]);
   calls.length = 0;
   await assert.rejects(service.updateOwnProfile(principal, { phone: '123', accountId: '99' }), errorCode(400, 'VALIDATION_ERROR'));
   assert.deepEqual(calls.map(([name]) => name), ['account']);

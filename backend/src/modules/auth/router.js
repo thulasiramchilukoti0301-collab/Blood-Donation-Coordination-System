@@ -127,7 +127,7 @@ export function createAuthRouter({ authService, donorService, accountService, se
   router.patch('/donors/me', currentAccount, requireRole('DONOR'), csrf, async (req, res, next) => {
     try {
       if (!donorService) throw new HttpError(503, 'DONOR_PROFILE_UNAVAILABLE', 'The donor profile is unavailable.');
-      const profile = await donorService.updateOwnProfile(req.authAccount.accountId, req.body);
+      const profile = await donorService.updateOwnProfile(req.authAccount.accountId, req.body, req.authSession);
       res.json({ success: true, profile });
     } catch (error) { next(error); }
   });

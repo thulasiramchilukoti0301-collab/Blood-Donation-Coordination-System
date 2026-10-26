@@ -38,7 +38,7 @@ export function createHospitalRouter({
 
   router.patch('/hospitals/me', currentAccount, hospitalRole, csrf, async (req, res, next) => {
     try {
-      const profile = await service().updateOwnProfile({ accountId: req.authAccount.accountId }, req.body);
+      const profile = await service().updateOwnProfile({ accountId: req.authAccount.accountId, session: req.authSession }, req.body);
       res.set('Cache-Control', 'no-store');
       res.json({ success: true, profile });
     } catch (error) { next(error); }

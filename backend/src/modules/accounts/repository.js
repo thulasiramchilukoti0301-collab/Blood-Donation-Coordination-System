@@ -32,9 +32,9 @@ export function createAccountAdminRepository(database) {
         return { accounts, pagination: { page, pageSize, total } };
       } catch (error) { throw safeAccountError(error); }
     },
-    async approve(connection, id) {
-      const [result] = await connection.execute(`UPDATE Account SET account_status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP
-        WHERE account_id = ? AND account_status = 'PENDING' AND role IN ('DONOR', 'HOSPITAL')`, [id]);
+    async setStatus(connection, id, transition) {
+      const [result] = await connection.execute(`UPDATE Account SET account_status = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE account_id = ? AND account_status = ? AND role IN ('DONOR', 'HOSPITAL')`, [transition.to, id, transition.from]);
       if (result.affectedRows !== 1) throw new Error();
     },
   };
