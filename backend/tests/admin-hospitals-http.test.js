@@ -106,6 +106,7 @@ test('ACTIVE Admin receives approved no-store list/detail envelopes without secr
     assert.doesNotMatch(sql, /password|session_data|SELECT \*/iu);
   }
   assert.equal(database.transactions.begun, 0);
+  assert.ok(database.coordinationTransactions.begun > 0, 'Authenticated login/response saves use Account coordination transactions.');
   assert.equal(database.calls.some(({ sql }) => /^(UPDATE Hospital|INSERT INTO (Account|Hospital))/u.test(sql)), false);
 });
 

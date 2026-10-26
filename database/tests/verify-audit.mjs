@@ -108,24 +108,23 @@ try {
 
   verificationStage = 'metadata-visibility-and-fresh-schema';
   if (isolatedDirectory !== undefined) {
-    // The caller assembled this fresh schema on its dedicated workspace server.
-    // Verify that exact instance without inspecting or changing any grants.
+    // Verify the dedicated instance as well as the visibility policy below.
+    // Instance identity never proves which schema objects this account can see.
     const [[instance]] = await connection.query('SELECT @@datadir AS data_directory, @@port AS port');
     const canonical = (path) => process.platform === 'win32' ? resolve(path).toLowerCase() : resolve(path);
     assert.equal(canonical(instance.data_directory), canonical(isolatedDirectory));
     assert.equal(Number(instance.port), port);
-  } else {
-    const [grantRows] = await connection.query('SHOW GRANTS');
-    const globalPrivileges = new Set();
-    for (const row of grantRows) for (const grant of Object.values(row)) {
-      if (typeof grant !== 'string') continue;
-      const match = grant.match(/^GRANT\s+(.+?)\s+ON\s+`?\*`?\.`?\*`?\s+TO\s+/iu);
-      if (match) for (const privilege of match[1].replaceAll('`', '').split(/\s*,\s*/u)) globalPrivileges.add(privilege.toUpperCase());
-    }
-    assert.ok(globalPrivileges.has('ALL PRIVILEGES')
-      || ['SELECT', 'SHOW_ROUTINE', 'TRIGGER', 'EVENT'].every((privilege) => globalPrivileges.has(privilege)),
-    'direct global metadata visibility is required');
   }
+  const [grantRows] = await connection.query('SHOW GRANTS');
+  const globalPrivileges = new Set();
+  for (const row of grantRows) for (const grant of Object.values(row)) {
+    if (typeof grant !== 'string') continue;
+    const match = grant.match(/^GRANT\s+(.+?)\s+ON\s+`?\*`?\.`?\*`?\s+TO\s+/iu);
+    if (match) for (const privilege of match[1].replaceAll('`', '').split(/\s*,\s*/u)) globalPrivileges.add(privilege.toUpperCase());
+  }
+  assert.ok(globalPrivileges.has('ALL PRIVILEGES')
+    || ['SELECT', 'SHOW_ROUTINE', 'TRIGGER', 'EVENT'].every((privilege) => globalPrivileges.has(privilege)),
+  'direct global metadata visibility is required');
   const [tables] = await connection.query(`SELECT TABLE_NAME AS name, TABLE_TYPE AS type,
     ENGINE AS engine, TABLE_COLLATION AS collation FROM information_schema.TABLES
     WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME`);

@@ -22,14 +22,17 @@ export function hospitalDatabase() {
   const sessions = new Map();
   const calls = [];
   const transactions = { begun: 0, committed: 0, rolledBack: 0, released: 0 };
+  const coordinationTransactions = { begun: 0, committed: 0, rolledBack: 0, released: 0 };
   const database = {
-    accounts, profiles, sessions, calls, transactions, failSql: null, beforeTransaction: null,
+    accounts, profiles, sessions, calls, transactions, coordinationTransactions, failSql: null, beforeTransaction: null,
     async execute(sql, values = []) {
       const query = sql.replace(/\s+/gu, ' ').trim();
       calls.push({ sql: query, values: [...values] });
       if (database.failSql?.(query)) throw new Error('private-driver-detail SELECT password_hash');
 
-      if (query.startsWith('SELECT session_data,')) return [[sessions.get(values[0])].filter(Boolean)];
+      if (query.startsWith('SELECT session_data,') || query.startsWith('SELECT expires_at FROM app_session')) {
+        return [[sessions.get(values[0])].filter(Boolean)];
+      }
       if (query.startsWith('INSERT INTO app_session')) {
         const [id, expiresAt, data] = values;
         const row = sessions.get(id);
@@ -38,6 +41,15 @@ export function hospitalDatabase() {
             revoked_at: row?.revoked_at ?? data });
         } else if (!row || (row.revoked_at === null && row.expires_at > values[4])) {
           sessions.set(id, { expires_at: expiresAt, session_data: data, revoked_at: null });
+        }
+        return [{ affectedRows: 1 }];
+      }
+      if (query.startsWith('UPDATE app_session SET session_data = ?')) {
+        const [data, expiry, id, now, accountId, role, status] = values;
+        const row = sessions.get(id);
+        const auth = row?.session_data ? JSON.parse(row.session_data).auth : null;
+        if (row?.revoked_at === null && row.expires_at > now && auth?.accountId === accountId && auth?.role === role && auth?.accountStatus === status) {
+          row.session_data = data; row.expires_at = expiry;
         }
         return [{ affectedRows: 1 }];
       }
@@ -50,11 +62,11 @@ export function hospitalDatabase() {
       if (query.includes('FROM Account WHERE email = ?')) {
         const account = [...accounts.values()].find(({ accountId }) => `${accountId}@example.test` === values[0]);
         return [account ? [{ account_id: account.accountId, role: account.role,
-          account_status: account.accountStatus, password_hash: passwordHash }] : []];
+          account_status: account.accountStatus, email: account.email ?? `${account.accountId}@example.test`, password_hash: account.passwordHash ?? passwordHash }] : []];
       }
       if (query.includes('FROM Account WHERE account_id = ?')) {
         const account = accounts.get(values[0]);
-        return [account ? [query.includes('AS accountId') ? { ...account } : {
+        return [account ? [query.includes('AS accountId') ? { ...account, ...(query.includes('password_hash') ? { email: account.email ?? `${account.accountId}@example.test`, passwordHash: account.passwordHash ?? passwordHash } : {}) } : {
           account_id: account.accountId, role: account.role, account_status: account.accountStatus,
         }] : []];
       }
@@ -79,20 +91,28 @@ export function hospitalDatabase() {
     },
     async getConnection() {
       let snapshot;
+      let counters;
       return {
-        execute: database.execute,
+        execute(sql, values) {
+          if (!counters) {
+            counters = sql.includes('password_hash AS passwordHash') && sql.includes('FOR UPDATE')
+              ? coordinationTransactions : transactions;
+            counters.begun += 1;
+          }
+          return database.execute(sql, values);
+        },
         async beginTransaction() {
           database.beforeTransaction?.();
           snapshot = structuredClone(profiles);
-          transactions.begun += 1;
         },
-        async commit() { transactions.committed += 1; },
+        async commit() { (counters ?? transactions).committed += 1; },
         async rollback() {
           profiles.clear();
           for (const [id, profile] of snapshot) profiles.set(id, profile);
-          transactions.rolledBack += 1;
+          (counters ?? transactions).rolledBack += 1;
         },
-        release() { transactions.released += 1; },
+        release() { (counters ?? transactions).released += 1; },
+        destroy() {},
       };
     },
   };

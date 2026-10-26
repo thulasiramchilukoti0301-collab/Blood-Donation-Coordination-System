@@ -1,6 +1,7 @@
 import { HttpError } from '../../utils/httpError.js';
 import { createHospitalRepository } from '../hospitals/repository.js';
 import { safeHospitalError } from '../hospitals/errors.js';
+import { withAccountLocks } from '../accounts/transaction.js';
 
 function requirePool(databasePool) {
   if (!databasePool) throw new HttpError(503, 'DATABASE_NOT_CONFIGURED', 'Database is not configured.');
@@ -15,16 +16,19 @@ function safeInsertId(value) {
 
 export function createAuthRepository(databasePool) {
   return {
+    withLockedAccount(accountId, work) {
+      return withAccountLocks(requirePool(databasePool), [accountId], (connection, accounts) => work(accounts.get(accountId), connection));
+    },
     async findAccountByEmail(email) {
       const database = requirePool(databasePool);
       const [rows] = await database.execute(
-        `SELECT CAST(account_id AS CHAR) AS account_id, password_hash, role, account_status
+        `SELECT CAST(account_id AS CHAR) AS account_id, email, password_hash, role, account_status
          FROM Account WHERE email = ? LIMIT 1`,
         [email],
       );
       if (!rows[0]) return null;
       return {
-        accountId: String(rows[0].account_id), passwordHash: rows[0].password_hash,
+        accountId: String(rows[0].account_id), email: rows[0].email, passwordHash: rows[0].password_hash,
         role: rows[0].role, accountStatus: rows[0].account_status,
       };
     },
@@ -137,8 +141,8 @@ export function createAuthRepository(databasePool) {
       }
     },
 
-    async findDonorProfile(accountId) {
-      const database = requirePool(databasePool);
+    async findDonorProfile(accountId, connection = databasePool) {
+      const database = requirePool(connection);
       const [rows] = await database.execute(
         `SELECT CAST(a.account_id AS CHAR) AS account_id, a.email, a.account_status,
                 d.full_name, DATE_FORMAT(d.date_of_birth, '%Y-%m-%d') AS date_of_birth,

@@ -11,7 +11,8 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "check:db": "node src/utils/checkDatabase.js"
+    "check:db": "node src/utils/checkDatabase.js",
+    "bootstrap:admin": "node src/cli/bootstrap-first-admin.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

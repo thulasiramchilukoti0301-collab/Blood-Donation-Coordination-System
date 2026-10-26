@@ -18,6 +18,19 @@ function databaseFailure(error) {
 export function createAuthService({ repository, passwordHasher = bcrypt, bcryptWorkFactor = BCRYPT_WORK_FACTOR }) {
   if (!repository) throw new TypeError('An authentication repository is required.');
 
+  function permitted(account) {
+    return account && ['DONOR', 'HOSPITAL', 'ADMIN'].includes(account.role)
+      && (account.accountStatus === 'ACTIVE' || (account.role !== 'ADMIN' && account.accountStatus === 'PENDING'));
+  }
+  function invalidLogin() { return new HttpError(LOGIN_FAILURE.status, LOGIN_FAILURE.code, LOGIN_FAILURE.message); }
+  function identity(account) { return { accountId: String(account.accountId), role: account.role, accountStatus: account.accountStatus }; }
+  async function verifyCredentials(email, password) {
+    const account = await repository.findAccountByEmail(email);
+    const matches = account ? await passwordHasher.compare(password, account.passwordHash) : false;
+    if (!matches || !permitted(account)) throw invalidLogin();
+    return account;
+  }
+
   return {
     async registerDonor(donor) {
       let passwordHash;
@@ -47,18 +60,26 @@ export function createAuthService({ repository, passwordHasher = bcrypt, bcryptW
 
     async authenticate(email, password) {
       try {
-        const account = await repository.findAccountByEmail(email);
-        const matches = account ? await passwordHasher.compare(password, account.passwordHash) : false;
-        if (!account || !matches) throw new HttpError(LOGIN_FAILURE.status, LOGIN_FAILURE.code, LOGIN_FAILURE.message);
-        const supportedRole = ['DONOR', 'HOSPITAL', 'ADMIN'].includes(account.role);
-        const allowedStatus = account.accountStatus === 'ACTIVE'
-          || (account.role !== 'ADMIN' && account.accountStatus === 'PENDING');
-        if (!supportedRole || !allowedStatus) throw new HttpError(LOGIN_FAILURE.status, LOGIN_FAILURE.code, LOGIN_FAILURE.message);
-        return { accountId: String(account.accountId), role: account.role, accountStatus: account.accountStatus };
+        return identity(await verifyCredentials(email, password));
       } catch (error) {
         if (error instanceof HttpError && error.code === LOGIN_FAILURE.code) throw error;
         throw databaseFailure(error);
       }
+    },
+
+    async establishSession(email, password, persist) {
+      try {
+        // bcrypt runs before taking database locks. Never authorize solely from
+        // this snapshot: email/hash/role and current status are rechecked below.
+        const verified = await verifyCredentials(email, password);
+        return await repository.withLockedAccount(verified.accountId, async (locked, connection) => {
+          if (!permitted(locked) || locked.passwordHash !== verified.passwordHash
+            || locked.email !== verified.email || locked.role !== verified.role) throw invalidLogin();
+          const account = identity(locked);
+          await persist(account, connection);
+          return account;
+        });
+      } catch (error) { throw databaseFailure(error); }
     },
 
     async currentAccount(accountId) {

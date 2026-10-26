@@ -27,7 +27,7 @@ export function hospitalRegistrationDatabase() {
       database.calls.push({ sql, values: [...values] });
       const account = [...database.accounts.values()].find((row) => row.email === values[0]);
       return [account ? [{ account_id: account.accountId, role: account.role,
-        account_status: account.accountStatus, password_hash: account.passwordHash }] : []];
+        account_status: account.accountStatus, email: account.email, password_hash: account.passwordHash }] : []];
     }
     if (sql.includes('FROM Hospital h JOIN Account')) {
       fail('profile');

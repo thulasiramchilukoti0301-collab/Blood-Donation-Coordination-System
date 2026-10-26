@@ -11,6 +11,7 @@ import { requireActiveAccount } from '../src/middleware/auth.js';
 import { validateDonorRegistration, validateLogin, localDateInKolkata } from '../src/modules/auth/validation.js';
 import { validatePassword } from '../src/modules/auth/passwordPolicy.js';
 import { HttpError } from '../src/utils/httpError.js';
+import { withAccountLocks } from '../src/modules/accounts/transaction.js';
 
 const validPassword = 'donor pass7!';
 const validRegistration = {
@@ -119,6 +120,52 @@ test('donor registration transaction rolls back a profile insertion failure and 
   assert.deepEqual(calls, ['begin', 'account-insert', 'donor-insert', 'rollback', 'release']);
 });
 
+test('registration stores only selected reported group, and unknown group rolls back before inserts', async () => {
+  for (const selectedId of ['4', null]) {
+    const calls = [];
+    let inserted;
+    const connection = {
+      beginTransaction: async () => calls.push('begin'),
+      execute: async (sql, parameters) => {
+        if (sql.includes('FROM BloodGroup')) {
+          calls.push('lookup-group');
+          assert.deepEqual(parameters, [selectedId]);
+          return [[{ blood_group_id: selectedId }]];
+        }
+        if (sql.includes('INSERT INTO Account')) { calls.push('account-insert'); return [{ insertId: '201' }]; }
+        if (sql.includes('INSERT INTO Donor')) { calls.push('donor-insert'); inserted = { sql, parameters }; return [{}]; }
+        throw new Error('Unexpected injected SQL operation.');
+      },
+      commit: async () => calls.push('commit'),
+      rollback: async () => calls.push('rollback'),
+      release: () => calls.push('release'),
+    };
+    const validated = validateDonorRegistration({ ...validRegistration, reportedBloodGroupId: selectedId });
+    await createAuthRepository({ getConnection: async () => connection }).createDonorAccountProfile({
+      ...validated, passwordHash: 'test-hash',
+    });
+    assert.equal(inserted.parameters.at(-1), selectedId);
+    assert.match(inserted.sql, /confirmed_blood_group_id\)\s+VALUES \(\?, \?, \?, \?, \?, \?, \?, NULL\)/u);
+    assert.deepEqual(calls, selectedId ? ['begin', 'lookup-group', 'account-insert', 'donor-insert', 'commit', 'release']
+      : ['begin', 'account-insert', 'donor-insert', 'commit', 'release']);
+  }
+  const calls = [];
+  const missing = {
+    beginTransaction: async () => calls.push('begin'),
+    execute: async (sql) => {
+      assert.match(sql, /FROM BloodGroup/u);
+      calls.push('lookup-group');
+      return [[]];
+    },
+    rollback: async () => calls.push('rollback'),
+    release: () => calls.push('release'),
+  };
+  await assert.rejects(createAuthRepository({ getConnection: async () => missing }).createDonorAccountProfile({
+    ...validateDonorRegistration({ ...validRegistration, reportedBloodGroupId: '999' }), passwordHash: 'test-hash',
+  }), (error) => error.status === 422 && error.code === 'INVALID_BLOOD_GROUP');
+  assert.deepEqual(calls, ['begin', 'lookup-group', 'rollback', 'release']);
+});
+
 test('a concurrent database email duplicate becomes a safe conflict response', async () => {
   const service = createAuthService({
     repository: { createDonorAccountProfile: async () => { throw Object.assign(new Error('private details'), { code: 'ER_DUP_ENTRY' }); } },
@@ -170,16 +217,31 @@ function storeCall(store, operation, ...argumentsBeforeCallback) {
 
 function injectedSessionDatabase() {
   const rows = new Map();
-  return {
+  const database = {
     rows,
+    async getConnection() {
+      return { execute: database.execute, async beginTransaction() {}, async commit() {}, async rollback() {}, release() {}, destroy() {} };
+    },
     async execute(sql, parameters) {
-      if (sql.startsWith('SELECT session_data')) {
+      if (sql.includes('FROM Account WHERE account_id = ? FOR UPDATE')) {
+        return [[{ accountId: parameters[0], role: 'DONOR', accountStatus: 'PENDING' }]];
+      }
+      if (sql.startsWith('UPDATE app_session SET session_data = ?')) {
+        const [data, expiry, id, now, accountId, role, status] = parameters;
+        const row = rows.get(id);
+        const auth = row?.session_data ? JSON.parse(row.session_data).auth : null;
+        if (row?.revoked_at === null && row.expires_at > now && auth?.accountId === accountId && auth.role === role && auth.accountStatus === status) {
+          row.session_data = data; row.expires_at = expiry;
+        }
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.startsWith('SELECT session_data') || sql.startsWith('SELECT expires_at FROM app_session')) {
         const row = rows.get(parameters[0]);
         return [row ? [{ ...row }] : []];
       }
       if (sql.startsWith('INSERT') && sql.includes('VALUES (?, ?, ?, NULL)')) {
-        assert.match(sql, /session_data = IF\(revoked_at IS NULL AND expires_at > \?/);
-        assert.match(sql, /expires_at = IF\(revoked_at IS NULL AND expires_at > \?/);
+        if (sql.includes('ON DUPLICATE KEY')) assert.match(sql, /session_data = IF\(revoked_at IS NULL AND expires_at > \?/);
+        if (sql.includes('ON DUPLICATE KEY')) assert.match(sql, /expires_at = IF\(revoked_at IS NULL AND expires_at > \?/);
         const [id, expiresAt, data, checkedAt] = parameters;
         const existing = rows.get(id);
         if (!existing) rows.set(id, { expires_at: expiresAt, session_data: data, revoked_at: null });
@@ -220,15 +282,21 @@ function injectedSessionDatabase() {
       throw new Error('Unexpected injected SQL operation.');
     },
   };
+  return database;
+}
+
+async function persistNewSession(store, database, id, value) {
+  return withAccountLocks(database, [value.auth.accountId], (connection) =>
+    store.withLoginTransaction(connection, value.auth, () => storeCall(store, 'set', id, value)));
 }
 
 test('production store keeps logout and account revocation tombstones against stale saves', async () => {
   const database = injectedSessionDatabase();
   const store = new MysqlSessionStore(database, 60_000);
-  const first = { auth: { accountId: '101' }, cookie: { expires: new Date(Date.now() + 60_000).toISOString() } };
-  const second = { auth: { accountId: '101' }, cookie: first.cookie };
-  const other = { auth: { accountId: '102' }, cookie: first.cookie };
-  await storeCall(store, 'set', 'logout-session', first);
+  const first = { auth: { accountId: '101', role: 'DONOR', accountStatus: 'PENDING' }, cookie: { expires: new Date(Date.now() + 60_000).toISOString() } };
+  const second = { auth: { accountId: '101', role: 'DONOR', accountStatus: 'PENDING' }, cookie: first.cookie };
+  const other = { auth: { accountId: '102', role: 'DONOR', accountStatus: 'PENDING' }, cookie: first.cookie };
+  await persistNewSession(store, database, 'logout-session', first);
   assert.deepEqual(await storeCall(store, 'get', 'logout-session'), first);
   await storeCall(store, 'destroy', 'logout-session');
   await storeCall(store, 'set', 'logout-session', first);
@@ -236,9 +304,9 @@ test('production store keeps logout and account revocation tombstones against st
   assert.equal(await storeCall(store, 'get', 'logout-session'), null);
   assert.equal(database.rows.get('logout-session').session_data, null);
 
-  await storeCall(store, 'set', 'account-session-a', first);
-  await storeCall(store, 'set', 'account-session-b', second);
-  await storeCall(store, 'set', 'other-account', other);
+  await persistNewSession(store, database, 'account-session-a', first);
+  await persistNewSession(store, database, 'account-session-b', second);
+  await persistNewSession(store, database, 'other-account', other);
   const loadedBeforeRevocation = await storeCall(store, 'get', 'account-session-a');
   assert.deepEqual(loadedBeforeRevocation, first);
   assert.equal((await store.revokeAccountSessions('101'))[0].affectedRows, 2);
@@ -251,9 +319,9 @@ test('production store keeps logout and account revocation tombstones against st
 test('production store tombstones expired sessions and sanitizes storage failures', async () => {
   const database = injectedSessionDatabase();
   const store = new MysqlSessionStore(database, 60_000);
-  const value = { auth: { accountId: '101' }, cookie: { expires: new Date(Date.now() + 60_000).toISOString() } };
+  const value = { auth: { accountId: '101', role: 'DONOR', accountStatus: 'PENDING' }, cookie: { expires: new Date(Date.now() + 60_000).toISOString() } };
   const beforeSet = Date.now();
-  await storeCall(store, 'set', 'expired-session', value);
+  await persistNewSession(store, database, 'expired-session', value);
   assert.ok(database.rows.get('expired-session').expires_at > beforeSet);
   assert.ok(database.rows.get('expired-session').expires_at <= beforeSet + 60_000);
   database.rows.get('expired-session').expires_at = Date.now() - 1;
@@ -295,6 +363,14 @@ function fakeService() {
 }
 
 function makeTestRuntime(authService, store = new session.MemoryStore()) {
+  // Explicit test-only adapter: HTTP guards use in-memory identity/session doubles.
+  // Production coordination is exercised separately with MysqlSessionStore.
+  authService.establishSession = async (email, password, persist) => {
+    const account = await authService.authenticate(email, password);
+    await persist(account, {});
+    return account;
+  };
+  store.withLoginTransaction = async (_connection, _account, work) => work();
   return {
     middleware: session({
       name: 'bdcs.sid', secret: 'test-only-secret-with-at-least-32-bytes', store,

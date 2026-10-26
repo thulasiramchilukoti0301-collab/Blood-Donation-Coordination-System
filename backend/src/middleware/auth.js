@@ -19,7 +19,7 @@ export function requireCurrentAccount(authService) {
       const account = await authService.currentAccount(claimed.accountId);
       const statusPermitted = account?.accountStatus === 'ACTIVE'
         || (account?.accountStatus === 'PENDING' && ['DONOR', 'HOSPITAL'].includes(account.role));
-      if (!account || account.role !== claimed.role || !statusPermitted) {
+      if (!account || account.role !== claimed.role || account.accountStatus !== claimed.accountStatus || !statusPermitted) {
         await destroySession(req);
         return next(new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session. Sign in again if the account is active.'));
       }
