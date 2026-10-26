@@ -128,6 +128,8 @@ AUDIT_EVENT(
 )
 ```
 
+HospitalRequest's existing eleven-column relation is now authored in 008, with restrictive Hospital/BloodGroup FKs, the documented indexes and row guards for SUBMITTED creation, immutable quantity and static/terminal transitions. RequestStatusHistory's existing seven-column relation and one conditional AFTER UPDATE trigger are prepared/tested only in `database/proposals/request-status-history.sql`; their deployment migration number remains UNASSIGNED. No initial-event trigger or additional logical field/status is introduced. Initial history remains application-written atomically with request creation/audit. See [Feature 7 storage and coordination](blood-request-storage.md).
+
 The bounded AuditEvent foundation authors `010_audit.sql` for this existing nine-column relation only: generated unsigned PK, restrictive actor-to-Account FK, case-sensitive entity-name/`SYSTEM_TASK` subject whitelist, subject ID NULL exactly for `SYSTEM_TASK`, and the two documented actor/subject timestamp indexes. No action/reason enum or extra attribute is introduced. A trusted system event may have a NULL actor and a real entity subject; actor NULL is not restricted to run-level `SYSTEM_TASK` subjects.
 
 The dependency plan is explicitly amended for Thulasi review before application: Account-only 010 may precede request storage once reviewed. RequestStatusHistory and its AFTER UPDATE trigger remain a separate future coordinated migration with number/filename **UNASSIGNED**; they are not added to 008 or appended to 010 later. The logical history relation and initial/update event responsibilities above are unchanged. This amendment changes neither feature ownership nor the 14-entity model. See [audit foundation](audit-foundation.md).

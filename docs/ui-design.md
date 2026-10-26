@@ -1,6 +1,6 @@
 # UI Design Themes
 
-This document records three available visual theme options for the Blood Donation Coordination System. Rose Quartz Focus remains selected for the implemented shared Login/Donor registration, access/error, Donor Profile read/edit, and account-status surfaces. The user selected **Mint Gauge for Hospital Registration, Hospital Profile, and Screen 24 Admin Hospital Management**, replacing the prior Hospital Rose Quartz Focus choice; scoped Hospital styles do not change the existing shared or Donor appearances. Theme assignments remain OPEN for other unimplemented screens in `ui-screen-map.md`; the user chooses each later page's theme. Recommendations may favor Mint Gauge for quantities/status and Sky Pipeline for processes, but those recommendations are not assignments.
+This document records three visual themes for the Blood Donation Coordination System. Rose Quartz Focus remains selected for the implemented shared Login/Donor registration, access/error, Donor Profile read/edit and account-status surfaces. **Mint Gauge** is selected for Feature 6 Hospital Registration, Hospital Profile and Screen 24 Admin Hospital Management; its scoped styles do not change shared or Donor appearances. **Sky Pipeline** is assigned to future Feature 7 Screens 12, 13, 14 and 25 (Create Blood Request, My Blood Requests, Blood Request Details and Admin Blood Request Management). Feature 7's database milestone does not implement React/CSS. Theme assignments for other unimplemented screens remain open for later user choice; recommendations are not assignments.
 
 ## Mint Gauge
 
@@ -30,6 +30,8 @@ For the bounded Hospital Registration/Profile and Admin Hospital Management mile
 Reuse the existing authenticated navigation and its placement: Hospital sessions have Hospital Profile, and ACTIVE ADMIN sessions have Hospital Management at `/admin/hospitals`. The optional Mint top-pill reference is not authorization for an application-wide navigation redesign or a second navigation bar. Hospital Registration remains a mode of the existing Login screen, not an extra top-level screen; Screen 24 details stay within its management page. See [Hospital frontend implementation](hospital-frontend.md) and [Admin Hospital Management contracts and verification](admin-hospital-management.md).
 
 ## Sky Pipeline
+
+Feature 7 uses the exact palette below with Lexend headings and Mulish body/controls. Use responsive cards/tables, labelled priorities/statuses and an accurate, potentially branching/repeating request history driven by authenticated APIs. Emergency uses #E5636D. Do not fabricate requests, fulfillment totals, gauges or completion percentages. Loading/empty/error/retry/access-denied states and unavailable dependencies must be explicit. No Feature 7 UI is built by the [database milestone](blood-request-storage.md), and Feature 6 remains Mint Gauge.
 
 | Token / property | Value |
 |---|---|
