@@ -6,10 +6,18 @@ import { environment } from '../src/config/environment.js';
 import { createAuthRouter, createAuthRuntime } from '../src/modules/auth/router.js';
 import { validateDonorProfilePatch } from '../src/modules/auth/validation.js';
 import { createDonorRepository } from '../src/modules/donors/repository.js';
-import { createDonorProfileService } from '../src/modules/donors/service.js';
+import { createDonorProfileService as actualDonorProfileService } from '../src/modules/donors/service.js';
+import { authorizeMemorySessions, testAuthorization, testSessionRow } from './helpers/session-context.mjs';
 import { HttpError } from '../src/utils/httpError.js';
 
 const accountId = '18446744073709551615';
+// Explicit session fixtures for isolated domain units; the production factory
+// requires a real server context and always executes its locked SID check.
+function createDonorProfileService(options) {
+  const service = actualDonorProfileService(options);
+  return { updateOwnProfile: (id, body, authorization = testAuthorization(id, 'DONOR', options.repository.testStatus === 'ACTIVE' ? 'ACTIVE' : 'PENDING')) =>
+    service.updateOwnProfile(id, body, authorization) };
+}
 const saved = Object.freeze({
   accountId, email: 'donor@example.test', accountStatus: 'PENDING',
   fullName: 'Sample Donor', dateOfBirth: '1990-01-01', phone: '+91 90000 00000',
@@ -51,12 +59,17 @@ test('PATCH validates only supplied profile fields using registration convention
 });
 
 function transactionFixture({ status = 'PENDING', role = 'DONOR', donorPresent = true, groupPresent = true, initialGroupId = '4',
-  updateError, commitError, rollbackError } = {}) {
+  updateError, commitError, rollbackError, releaseError, destroyError, sessionRow } = {}) {
   const calls = [];
   const rows = { ...saved, accountStatus: status, reportedBloodGroupId: initialGroupId };
   const connection = {
     async beginTransaction() { calls.push('begin'); },
     async execute(sql, values) {
+      if (sql.startsWith('SELECT session_data')) {
+        calls.push('lock-session');
+        const row = sessionRow === undefined ? testSessionRow(testAuthorization(accountId, 'DONOR', status)) : sessionRow;
+        return [row ? [row] : []];
+      }
       if (sql.includes('FROM Account') && sql.includes('FOR UPDATE')) {
         calls.push('lock-account');
         assert.deepEqual(values, [accountId]);
@@ -97,9 +110,12 @@ function transactionFixture({ status = 'PENDING', role = 'DONOR', donorPresent =
     },
     async commit() { calls.push('commit'); if (commitError) throw commitError; },
     async rollback() { calls.push('rollback'); if (rollbackError) throw rollbackError; },
-    release() { calls.push('release'); },
+    release() { calls.push('release'); if (releaseError) throw releaseError; },
+    destroy() { calls.push('destroy'); if (destroyError) throw destroyError; },
   };
-  return { calls, rows, connection, repository: createDonorRepository({ async getConnection() { calls.push('connection'); return connection; } }) };
+  const repository = createDonorRepository({ async getConnection() { calls.push('connection'); return connection; } });
+  repository.testStatus = status;
+  return { calls, rows, connection, repository };
 }
 
 test('repository locks Account before Donor, uses fixed columns and same connection, commits unchanged updates', async () => {
@@ -111,7 +127,7 @@ test('repository locks Account before Donor, uses fixed columns and same connect
   assert.equal(result.email, saved.email);
   assert.equal(result.dateOfBirth, saved.dateOfBirth);
   assert.deepEqual(result.reportedBloodGroup, saved.reportedBloodGroup);
-  assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-donor', 'update', 'read-profile', 'commit', 'release']);
+  assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-session', 'lock-donor', 'update', 'read-profile', 'commit', 'release']);
   const connection = fixture.connection;
   const originalExecute = connection.execute;
   connection.execute = async (sql, values) => {
@@ -136,7 +152,7 @@ test('reported group selection, change, clearing, and omission preserve confirma
   const changed = await service.updateOwnProfile(accountId, { reportedBloodGroupId: '2' });
   assert.deepEqual(changed.reportedBloodGroup, { id: '2', code: 'O+', displayName: 'O positive' });
   assert.equal(changed.confirmedBloodGroup, null);
-  assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-donor', 'lookup-group', 'update', 'read-profile', 'commit', 'release']);
+  assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-session', 'lock-donor', 'lookup-group', 'update', 'read-profile', 'commit', 'release']);
   const preserved = await service.updateOwnProfile(accountId, { phone: '456' });
   assert.equal(preserved.reportedBloodGroup.id, '2');
   assert.equal(preserved.phone, '456');
@@ -181,11 +197,73 @@ test('transaction rechecks role/status, missing Donor, rollback and release safe
     const service = createDonorProfileService({ repository: fixture.repository });
     await assert.rejects(service.updateOwnProfile(accountId, { phone: '123' }),
       (error) => error instanceof HttpError && error.code === code && !/private|SQL|password/.test(error.message));
-    assert.equal(fixture.calls.at(-1), 'release');
+    assert.equal(fixture.calls.at(-1), options.rollbackError ? 'destroy' : 'release');
+    assert.equal(fixture.calls.includes('release'), !options.rollbackError);
     assert.ok(fixture.calls.includes('rollback'));
     assert.ok(!fixture.calls.includes('commit') || options.commitError);
     if (code === 'ACCOUNT_UNAVAILABLE') assert.ok(!fixture.calls.includes('update'));
   }
+});
+
+function safeCleanupFailure(error) {
+  assert.ok(error instanceof HttpError);
+  assert.equal(error.status, 503);
+  assert.equal(error.code, 'DATABASE_UNAVAILABLE');
+  assert.doesNotMatch(String(error) + JSON.stringify(error), /private|SQL|password|connection options/u);
+  return true;
+}
+
+for (const destroyFails of [false, true]) {
+  test(`Donor failed rollback destroys without release even when destruction ${destroyFails ? 'fails' : 'succeeds'}`, async () => {
+    const fixture = transactionFixture({
+      updateError: new Error('private SQL password detail'),
+      rollbackError: new Error('private rollback detail'),
+      destroyError: destroyFails ? new Error('private connection options') : undefined,
+    });
+    await assert.rejects(createDonorProfileService({ repository: fixture.repository })
+      .updateOwnProfile(accountId, { phone: '456' }), safeCleanupFailure);
+    assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-session', 'lock-donor', 'update', 'rollback', 'destroy']);
+    assert.equal(fixture.rows.phone, saved.phone);
+  });
+
+  test(`Donor revoked SID rejection then failed rollback never releases; destruction ${destroyFails ? 'fails' : 'succeeds'}`, async () => {
+    const fixture = transactionFixture({
+      sessionRow: { session_data: null, revoked_at: 1, expires_at: Date.now() + 60_000 },
+      rollbackError: new Error('private rollback detail'),
+      destroyError: destroyFails ? new Error('private connection options') : undefined,
+    });
+    await assert.rejects(createDonorProfileService({ repository: fixture.repository })
+      .updateOwnProfile(accountId, { phone: '456', reportedBloodGroupId: '2' }), safeCleanupFailure);
+    assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-session', 'rollback', 'destroy']);
+    assert.deepEqual(fixture.rows, { ...saved, reportedBloodGroupId: '4' });
+  });
+
+  for (const operationFails of [false, true]) {
+    test(`Donor release failure after ${operationFails ? 'rollback' : 'commit'} attempts destruction and returns safe failure; destruction ${destroyFails ? 'fails' : 'succeeds'}`, async () => {
+      const fixture = transactionFixture({
+        updateError: operationFails ? new Error('private SQL password detail') : undefined,
+        releaseError: new Error('private release detail'),
+        destroyError: destroyFails ? new Error('private connection options') : undefined,
+      });
+      await assert.rejects(createDonorProfileService({ repository: fixture.repository })
+        .updateOwnProfile(accountId, { phone: '456' }), safeCleanupFailure);
+      assert.deepEqual(fixture.calls.slice(-3), [operationFails ? 'rollback' : 'commit', 'release', 'destroy']);
+      assert.equal(fixture.calls.filter(call => call === 'release').length, 1);
+      assert.equal(fixture.calls.filter(call => call === 'destroy').length, 1);
+      assert.equal(fixture.calls.includes('rollback'), operationFails);
+      assert.equal(fixture.calls.includes('commit'), !operationFails);
+      assert.equal(fixture.rows.phone, operationFails ? saved.phone : '456');
+    });
+  }
+}
+
+test('Donor missing stored SID preserves authorization denial after successful rollback and release', async () => {
+  const fixture = transactionFixture({ sessionRow: null });
+  await assert.rejects(createDonorProfileService({ repository: fixture.repository })
+    .updateOwnProfile(accountId, { phone: '456' }), error => error instanceof HttpError
+      && error.status === 401 && error.code === 'ACCOUNT_UNAVAILABLE');
+  assert.deepEqual(fixture.calls, ['connection', 'begin', 'lock-account', 'lock-session', 'rollback', 'release']);
+  assert.deepEqual(fixture.rows, { ...saved, reportedBloodGroupId: '4' });
 });
 
 const servers = [];
@@ -205,6 +283,7 @@ async function start({ role = 'DONOR', status = 'PENDING', donorService } = {}) 
     await persist(account, {}); return account;
   };
   const store = new session.MemoryStore();
+  authorizeMemorySessions(authService, store);
   store.withLoginTransaction = async (_connection, _account, work) => work();
   const runtime = {
     middleware: session({
@@ -341,7 +420,8 @@ test('HTTP PATCH rejects protected/invalid payloads and reports safe missing-pro
   let donorPresent = true;
   const donorService = createDonorProfileService({
     repository: { withTransaction: async (work) => work({
-      findAccountForUpdate: async () => ({ role: 'DONOR', account_status: 'PENDING' }),
+      findAccountForUpdate: async () => ({ account_id: accountId, role: 'DONOR', account_status: 'PENDING' }),
+      authorizeSession: async (authorization) => { assert.equal(authorization.principal.accountId, accountId); },
       findDonorForUpdate: async () => donorPresent ? { account_id: accountId } : null,
       updateProfile: async () => { mutations += 1; },
       findProfile: async () => saved,

@@ -98,11 +98,11 @@ export function hospitalDatabase() {
             counters = sql.includes('password_hash AS passwordHash') && sql.includes('FOR UPDATE')
               ? coordinationTransactions : transactions;
             counters.begun += 1;
+            if (counters === transactions) database.beforeTransaction?.();
           }
           return database.execute(sql, values);
         },
         async beginTransaction() {
-          database.beforeTransaction?.();
           snapshot = structuredClone(profiles);
         },
         async commit() { (counters ?? transactions).committed += 1; },

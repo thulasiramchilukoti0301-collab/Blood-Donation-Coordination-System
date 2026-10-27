@@ -12,6 +12,7 @@ import { validateDonorRegistration, validateLogin, localDateInKolkata } from '..
 import { validatePassword } from '../src/modules/auth/passwordPolicy.js';
 import { HttpError } from '../src/utils/httpError.js';
 import { withAccountLocks } from '../src/modules/accounts/transaction.js';
+import { authorizeMemorySessions } from './helpers/session-context.mjs';
 
 const validPassword = 'donor pass7!';
 const validRegistration = {
@@ -363,6 +364,7 @@ function fakeService() {
 }
 
 function makeTestRuntime(authService, store = new session.MemoryStore()) {
+  authorizeMemorySessions(authService, store);
   // Explicit test-only adapter: HTTP guards use in-memory identity/session doubles.
   // Production coordination is exercised separately with MysqlSessionStore.
   authService.establishSession = async (email, password, persist) => {

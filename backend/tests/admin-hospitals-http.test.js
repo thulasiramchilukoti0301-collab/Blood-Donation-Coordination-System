@@ -275,7 +275,7 @@ test('Admin list/detail authorization is rechecked by the Hospital service after
     const execute = database.execute;
     database.execute = async (sql, values) => {
       const result = await execute(sql, values);
-      if (sql.includes('FROM Account WHERE account_id = ?') && !sql.includes('AS accountId')) {
+      if (sql.includes('FROM Account WHERE account_id = ?') && sql.includes('password_hash AS passwordHash')) {
         database.accounts.get('31').accountStatus = 'SUSPENDED';
       }
       return result;

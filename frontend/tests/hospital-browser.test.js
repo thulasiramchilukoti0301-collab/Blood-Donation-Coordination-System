@@ -17,7 +17,10 @@ const browser = [
 
 async function browserDom(url, width, profileDirectory) {
   return new Promise((resolveResult, reject) => {
-    const child = spawn(browser, ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-extensions',
+    // Many isolated mount/navigation scenarios intentionally exceed Chrome's
+    // rapid history IPC limit. Disable that test-driver throttle in this fresh
+    // temporary profile; production routing and every assertion stay unchanged.
+    const child = spawn(browser, ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-extensions', '--disable-ipc-flooding-protection',
       '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-sync',
       '--host-resolver-rules=MAP fonts.googleapis.com ~NOTFOUND, MAP fonts.gstatic.com ~NOTFOUND',
       '--dump-dom', '--virtual-time-budget=25000', `--window-size=${width},1100`,

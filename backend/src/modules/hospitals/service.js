@@ -7,8 +7,8 @@ const forbidden = () => new HttpError(403, 'FORBIDDEN', 'This Hospital operation
 const unauthenticated = () => new HttpError(401, 'UNAUTHENTICATED', 'Authentication is required.');
 
 // trustedPrincipal must originate from Thulasi's verified server-side session.
-// It is NOT a request body/query parameter. These current-account checks are
-// domain authorization only, not authentication or proof of a valid session.
+// It is NOT a request body/query parameter. Read-side domain checks follow the
+// HTTP session guard; writes additionally revalidate the stored SID under locks.
 export function createHospitalService({ repository }) {
   async function authorize(repo, trustedPrincipal, role, forUpdate = false) {
     if (!trustedPrincipal || !Object.hasOwn(trustedPrincipal, 'accountId')) throw unauthenticated();
@@ -18,6 +18,7 @@ export function createHospitalService({ repository }) {
     if (!current) throw unauthenticated();
     const allowedStatus = role === 'ADMIN' ? ['ACTIVE'] : ['PENDING', 'ACTIVE'];
     if (current.role !== role || !allowedStatus.includes(current.accountStatus)) throw forbidden();
+    if (forUpdate) await repo.authorizeSession(trustedPrincipal.session, current);
     return id;
   }
   async function safely(work) {

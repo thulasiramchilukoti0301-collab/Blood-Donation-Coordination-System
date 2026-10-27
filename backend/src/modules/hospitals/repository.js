@@ -1,4 +1,5 @@
 import { safeHospitalError } from './errors.js';
+import { requireStoredSession } from '../accounts/sessionAuthorization.js';
 
 const profileColumns = `CAST(h.account_id AS CHAR) AS hospitalId,
   h.organization_name AS organizationName, h.registration_number AS registrationNumber,
@@ -19,6 +20,7 @@ export function createHospitalRepository(database) {
     }
   }
   return {
+    authorizeSession(authorization, account) { return requireStoredSession(database, authorization, account); },
     async findAccountById(id, { forUpdate = false } = {}) {
       const [rows] = await execute(`SELECT CAST(account_id AS CHAR) AS accountId, role, account_status AS accountStatus
         FROM Account WHERE account_id = ?${forUpdate ? ' FOR UPDATE' : ''}`, [id]);

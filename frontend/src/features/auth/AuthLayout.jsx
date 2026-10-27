@@ -1,10 +1,11 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from './AuthProvider';
 import '../hospitals/hospital.css';
 
 export default function AuthLayout({ children, wide = false, theme = 'rose' }) {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
   const [logoutError, setLogoutError] = useState('');
   const [logoutBusy, setLogoutBusy] = useState(false);
   const mint = theme === 'mint';
@@ -28,8 +29,8 @@ export default function AuthLayout({ children, wide = false, theme = 'rose' }) {
           <nav className={`${prefix}-nav`} aria-label="Account navigation">
             {user ? <>
               {user.role === 'ADMIN' && user.accountStatus === 'ACTIVE'
-                ? <><Link to="/admin/hospitals" aria-current={mint ? 'page' : undefined}>Hospital management</Link><Link to="/account/status">Account status</Link></>
-                : user.role === 'HOSPITAL' ? <Link to="/hospital/profile" aria-current={mint ? 'page' : undefined}>Hospital Profile</Link> : user.role === 'DONOR'
+                ? <><Link to="/admin/hospitals" aria-current={pathname === '/admin/hospitals' ? 'page' : undefined}>Hospital management</Link><Link to="/admin/accounts" aria-current={pathname === '/admin/accounts' ? 'page' : undefined}>Account management</Link><Link to="/account/status" aria-current={pathname === '/account/status' ? 'page' : undefined}>Account status</Link></>
+                : user.role === 'HOSPITAL' ? <Link to="/hospital/profile" aria-current={pathname === '/hospital/profile' ? 'page' : undefined}>Hospital Profile</Link> : user.role === 'DONOR'
                 ? <Link to="/donor/profile">My profile</Link>
                 : <Link to="/account/status">Account status</Link>}
               <button className={`${prefix}-link-button`} type="button" onClick={() => void signOut()} disabled={logoutBusy}>{logoutBusy ? 'Signing out…' : 'Sign out'}</button>

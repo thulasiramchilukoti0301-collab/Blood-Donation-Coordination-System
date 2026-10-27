@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { HttpError } from '../../utils/httpError.js';
 import { BCRYPT_WORK_FACTOR } from './passwordPolicy.js';
+import { requireStoredSession, sessionAuthorization } from '../accounts/sessionAuthorization.js';
 
 const LOGIN_FAILURE = Object.freeze({ status: 401, code: 'INVALID_CREDENTIALS', message: 'Email or password is invalid.' });
 
@@ -85,6 +86,14 @@ export function createAuthService({ repository, passwordHasher = bcrypt, bcryptW
     async currentAccount(accountId) {
       try { return await repository.findAccountById(String(accountId)); }
       catch (error) { throw databaseFailure(error); }
+    },
+
+    async authorizeSession(sessionId, principal) {
+      try {
+        const context = sessionAuthorization(sessionId, principal);
+        return await repository.withLockedAccount(context.principal.accountId, (account, connection) =>
+          requireStoredSession(connection, context, account));
+      } catch (error) { throw databaseFailure(error); }
     },
 
     async donorProfile(accountId) {

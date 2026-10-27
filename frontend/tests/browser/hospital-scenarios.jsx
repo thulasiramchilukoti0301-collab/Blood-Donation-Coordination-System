@@ -6,6 +6,8 @@ import { BrowserRouter } from 'react-router-dom';
 import App from '../../src/App';
 import { api } from '../../src/services/api';
 import '../../src/styles/global.css';
+import { runAccountApprovalScenarios } from './account-approval-scenarios';
+import { runAccountStatusScenarios } from './account-status-scenarios';
 
 const container = document.getElementById('hospital-test-app');
 const report = document.getElementById('hospital-test-result');
@@ -20,6 +22,12 @@ const profile = (status = 'PENDING') => ({
 });
 const hospitalUser = (status = 'PENDING') => ({ accountId: '123', role: 'HOSPITAL', accountStatus: status });
 const adminUser = (status = 'ACTIVE') => ({ accountId: '31', role: 'ADMIN', accountStatus: status });
+const approvalAccounts = () => Array.from({ length: 23 }, (_, index) => ({
+  accountId: index ? String(2000 + index) : '9007199254740993',
+  email: index ? `applicant${index}@example.test` : `${'long-email-'.repeat(15)}@example.test`,
+  role: index % 2 ? 'HOSPITAL' : 'DONOR', accountStatus: index < 21 ? 'PENDING' : index === 21 ? 'ACTIVE' : 'SUSPENDED',
+  createdAt: '2026-10-26 09:30:00', passwordHash: 'SECRET_SENTINEL_NOT_FOR_DISPLAY', sessionData: 'SECRET_SESSION_SENTINEL',
+}));
 const adminProfiles = () => Array.from({ length: 23 }, (_, index) => ({ ...profile(['PENDING', 'ACTIVE', 'SUSPENDED'][index % 3]),
   hospitalId: String(1000 + index), organizationName: `Isolated Admin Hospital ${String(index + 1).padStart(2, '0')}`,
   registrationNumber: index ? `TEST-${index + 1}` : null, contactName: `Isolated contact ${index + 1}`,
@@ -32,7 +40,7 @@ function assert(condition, message) { checks += 1; if (!condition) throw new Err
 async function waitFor(condition, message, timeout = 3000) {
   const started = performance.now();
   while (!condition()) {
-    if (performance.now() - started > timeout) throw new Error(`Timed out: ${message}`);
+    if (performance.now() - started > timeout) throw new Error(`Timed out: ${message}; route=${location.pathname}${location.search}; heading=${container.querySelector('h1')?.textContent ?? 'none'}`);
     await pause(5);
   }
 }
@@ -50,17 +58,53 @@ async function mount(path, options = {}) {
   container.replaceChildren();
   fixture = { user: null, profile: profile(), calls: [], csrf: 0, registrationConflict: null,
     profileFailures: 0, profileEmpty: false, holdProfile: false, loginRole: 'HOSPITAL',
-    adminProfiles: adminProfiles(), adminListFailures: 0, adminDetailFailures: 0, ...options };
+    adminProfiles: adminProfiles(), adminListFailures: 0, adminDetailFailures: 0,
+    approvalAccounts: approvalAccounts(), queueFailures: 0, ...options };
   const current = fixture;
   api.defaults.adapter = async (config) => {
     const method = config.method.toLowerCase();
     const data = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
     const headers = Object.fromEntries(Object.entries(config.headers.toJSON()).map(([key, value]) => [key.toLowerCase(), value]));
-    current.calls.push({ url: config.url, method, data, headers, params: config.params });
-    if (config.url === '/auth/me') return current.user
-      ? response(config, { success: true, user: current.user })
-      : errorResponse(config, 401, 'AUTHENTICATION_REQUIRED', 'Sign in to continue.');
-    if (config.url === '/auth/csrf') return response(config, { success: true, csrfToken: (++current.csrf).toString(16).padStart(64, '0') });
+    current.calls.push({ url: config.url, method, data, headers, params: config.params, signal: config.signal });
+    if (config.url === '/auth/me') {
+      if (current.holdIdentity) { current.holdIdentity = false; await new Promise(resolve => { current.releaseIdentity = resolve; }); }
+      if (current.identityFailures > 0) { current.identityFailures--; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Identity service unavailable.'); }
+      return current.user ? response(config, { success: true, user: current.user })
+        : errorResponse(config, 401, 'AUTHENTICATION_REQUIRED', 'Sign in to continue.');
+    }
+    if (config.url === '/auth/csrf') {
+      if (current.statusCsrfFailure) { current.statusCsrfFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'PRIVATE'); }
+      if (current.holdApprovalCsrf) { current.holdApprovalCsrf = false; await new Promise(resolve => { current.releaseApprovalCsrf = resolve; }); }
+      return response(config, { success: true, csrfToken: (++current.csrf).toString(16).padStart(64, '0') });
+    }
+    if (config.url === '/admin/accounts' && method === 'get') {
+      if (current.expireAccounts) return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Session no longer available.');
+      if (current.queueFailures > 0) { current.queueFailures--; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'PRIVATE service information'); }
+      const { role, accountStatus = 'PENDING', search = '', page = 1 } = config.params || {};
+      const rows = current.approvalAccounts.filter(row => (!role || row.role === role) && row.accountStatus === accountStatus && row.email.toLowerCase().includes(search.toLowerCase()));
+      const payload = { success: true, accounts: structuredClone(rows.slice((page - 1) * 20, page * 20)), pagination: { page, pageSize: 20, total: rows.length } };
+      if (current.holdQueue) { current.holdQueue = false; await new Promise(resolve => { current.releaseQueue = resolve; }); }
+      return response(config, payload);
+    }
+    if (config.url.startsWith('/admin/accounts/') && method === 'patch') {
+      if (current.holdApproval) { current.holdApproval = false; await new Promise(resolve => { current.releaseApproval = resolve; }); }
+      if (current.oldApprovalUnauthorized) return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Old session is unavailable.');
+      const row = current.approvalAccounts.find(row => row.accountId === config.url.split('/').at(-1));
+      const mappings = { REGISTRATION_REVIEWED: ['PENDING', 'ACTIVE'], ACCESS_RESTRICTED: ['ACTIVE', 'SUSPENDED'], ACCESS_RESTORED: ['SUSPENDED', 'ACTIVE'] };
+      const transition = mappings[data?.reason];
+      if (!row) return errorResponse(config, 404, 'ACCOUNT_NOT_FOUND', 'Missing account.');
+      if (!transition || Object.keys(data).length !== 2 || data.accountStatus !== transition[1]) return errorResponse(config, 400, 'VALIDATION_ERROR', 'Invalid fixture action.');
+      const conflict = data.reason === 'REGISTRATION_REVIEWED' ? 'ACCOUNT_APPROVAL_CONFLICT' : 'ACCOUNT_STATUS_CONFLICT';
+      if (current.approvalMode === 'conflict') { row.accountStatus = transition[1]; return errorResponse(config, 409, conflict, 'Account changed.'); }
+      if (row.accountStatus !== transition[0]) return errorResponse(config, 409, conflict, 'Account source changed.');
+      row.accountStatus = transition[1];
+      if (current.approvalMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
+      if (current.approvalMode === 'unknown') return errorResponse(config, 503, 'TRANSACTION_OUTCOME_UNKNOWN', 'PRIVATE transaction detail');
+      if (current.approvalMode === 'malformed') return response(config, { success: true, accountId: 'invalid', accountStatus: transition[1] });
+      if (current.approvalMode === 'wrong-status') return response(config, { success: true, accountId: row.accountId, accountStatus: transition[0] });
+      if (current.failRefreshAfterApproval) { current.failRefreshAfterApproval = false; current.queueFailures = 1; }
+      return response(config, { success: true, accountId: row.accountId, accountStatus: transition[1] });
+    }
     if (config.url.startsWith('/admin/hospitals')) {
       if (current.expireAdmin) { current.user = null; return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session.'); }
       if (current.user?.role !== 'ADMIN' || current.user.accountStatus !== 'ACTIVE') return errorResponse(config, 403, 'FORBIDDEN', 'An active Admin account is required.');
@@ -99,7 +143,7 @@ async function mount(path, options = {}) {
     }
     if (config.url === '/auth/register/donors') return response(config, { success: true, accountId: '321', donorId: '321', accountStatus: 'PENDING' }, 201);
     if (config.url === '/auth/login') {
-      current.user = current.loginRole === 'ADMIN' ? adminUser() : { accountId: current.loginRole === 'DONOR' ? '321' : '123', role: current.loginRole, accountStatus: 'PENDING' };
+      current.user = current.loginRole === 'ADMIN' ? { ...adminUser(), accountId: current.loginAccountId || '31' } : { accountId: current.loginRole === 'DONOR' ? '321' : '123', role: current.loginRole, accountStatus: 'PENDING' };
       return response(config, { success: true, user: current.user });
     }
     if (config.url === '/auth/logout') { current.user = null; return response(config, { success: true, message: 'You have been signed out.' }); }
@@ -143,6 +187,10 @@ async function run(name, work) {
 }
 
 async function scenarios() {
+  await runAccountApprovalScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
+    container, adminUser, hospitalUser, run });
+  await runAccountStatusScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
+    container, adminUser, hospitalUser, run });
   await run('ACTIVE Admin list, Mint styling, pagination, scoped navigation and approved data only', async () => {
     await mount('/admin/hospitals', { user: adminUser() });
     await waitFor(() => container.querySelectorAll('.mint-admin-table tbody tr').length === 20, 'first Admin page');

@@ -14,12 +14,15 @@ export function accountDatabase() {
   ].map(([accountId, role, accountStatus]) => [accountId, { accountId, email: `${accountId}@example.test`,
     role, accountStatus, passwordHash, createdAt: '2026-10-26 09:00:00' }]));
   const sessions = new Map();
+  const donors = new Map(['10', '11'].map(id => [id, { fullName: 'Disposable Donor', phone: '123', address: 'Test address', area: null }]));
+  const hospitals = new Map(['20', '12'].map(id => [id, { hospitalId: id, organizationName: 'Disposable Hospital', registrationNumber: null,
+    contactName: 'Test contact', phone: '123', address: 'Test address', createdAt: '2026-10-26 09:00:00', updatedAt: '2026-10-26 09:00:00' }]));
   const audits = [];
   const calls = [];
   const events = [];
   const locks = new Map();
   let connectionId = 0;
-  const db = { accounts, sessions, audits, calls, events, failures: new Set(), hooks: {}, connections: [] };
+  const db = { accounts, sessions, donors, hospitals, audits, calls, events, failures: new Set(), hooks: {}, connections: [] };
   function fail(stage) { if (db.failures.has(stage)) throw privateFailure(); }
   async function execute(connection, sql, values = []) {
     const query = sql.replace(/\s+/gu, ' ').trim();
@@ -30,6 +33,7 @@ export function accountDatabase() {
     if (query.includes('FROM Account WHERE account_id = ? FOR UPDATE')) {
       fail('lock'); assert.ok(connection?.active);
       const id = values[0];
+      await db.hooks.beforeLock?.(id, connection);
       if (!connection.held.has(id)) {
         const existing = locks.get(id);
         if (existing) {
@@ -41,7 +45,8 @@ export function accountDatabase() {
       }
       events.push(`${connection.id}:lock:${id}`);
       await db.hooks.lock?.(id, connection);
-      return [account(id) ? [{ ...account(id) }] : []];
+      const locked = account(id);
+      return [locked ? [query.includes('AS account_id') ? { account_id: id, role: locked.role, account_status: locked.accountStatus } : { ...locked }] : []];
     }
     if (query.includes('FROM Account WHERE email = ?')) {
       const row = [...accounts.values()].find((a) => a.email === values[0]);
@@ -67,11 +72,13 @@ export function accountDatabase() {
       return [rows.map((a) => ({ ...a, privateProfile: 'PRIVATE' }))];
     }
     if (query.startsWith('UPDATE Account')) {
-      fail('approve'); assert.ok(connection?.active && connection.held.has(values[0]));
-      const row = account(values[0]);
+      fail('approve'); fail('mutation');
+      const [to, id, from] = values;
+      assert.ok(connection?.active && connection.held.has(id));
+      const row = account(id);
       assert.match(query, /updated_at = CURRENT_TIMESTAMP/u);
-      const valid = row?.accountStatus === 'PENDING' && ['DONOR', 'HOSPITAL'].includes(row.role);
-      if (valid) connection.accountWrites.set(values[0], { ...row, accountStatus: 'ACTIVE' });
+      const valid = row?.accountStatus === from && ['DONOR', 'HOSPITAL'].includes(row.role);
+      if (valid) connection.accountWrites.set(id, { ...row, accountStatus: to });
       return [{ affectedRows: valid ? 1 : 0 }];
     }
     if (query.startsWith('INSERT INTO AuditEvent')) {
@@ -87,7 +94,14 @@ export function accountDatabase() {
       const row = connection.sessionWrites.get(values[0]) ?? sessions.get(values[0]);
       return [row ? [{ expires_at: row.expires_at }] : []];
     }
-    if (query.startsWith('SELECT session_data')) return [sessions.has(values[0]) ? [{ ...sessions.get(values[0]) }] : []];
+    if (query.startsWith('SELECT session_data')) {
+      if (query.endsWith('FOR UPDATE')) {
+        fail('session-authorize'); assert.ok(connection?.active && connection.held.size > 0);
+        await db.hooks.authorizeSession?.(values[0], connection);
+      }
+      const row = connection?.sessionWrites.get(values[0]) ?? sessions.get(values[0]);
+      return [row ? [{ ...row }] : []];
+    }
     if (query.startsWith('INSERT INTO app_session')) {
       const [id, expiresAt, data] = values;
       const row = allSessions.get(id);
@@ -126,13 +140,38 @@ export function accountDatabase() {
       if (valid) writeSession(id, { ...row, expires_at: expiry, session_data: touch ? row.session_data : data });
       return [{ affectedRows: valid ? 1 : 0 }];
     }
+    if (query.includes('FROM Donor WHERE account_id = ? FOR UPDATE')) {
+      assert.ok(connection?.held.has(values[0]));
+      return [donors.has(values[0]) ? [{ account_id: values[0] }] : []];
+    }
+    if (query.includes('FROM Donor AS d')) {
+      const id = values[0]; const donor = connection?.profileWrites.get('D:' + id) ?? donors.get(id);
+      return [donor ? [{ account_id: id, email: account(id).email, account_status: account(id).accountStatus,
+        full_name: donor.fullName, date_of_birth: '1990-01-01', phone: donor.phone, address: donor.address, area: donor.area,
+        reported_blood_group_id: null, confirmed_blood_group_id: null }] : []];
+    }
+    if (query.includes('FROM Hospital h JOIN Account')) {
+      const id = values[0]; const hospital = connection?.profileWrites.get('H:' + id) ?? hospitals.get(id);
+      return [hospital ? [{ ...hospital, accountStatus: account(id).accountStatus }] : []];
+    }
+    if (/^UPDATE (Donor|Hospital) SET/u.test(query)) {
+      fail('profile'); const id = values.at(-1); assert.ok(connection?.held.has(id));
+      const donor = query.startsWith('UPDATE Donor');
+      const key = (donor ? 'D:' : 'H:') + id;
+      const previous = connection.profileWrites.get(key) ?? (donor ? donors : hospitals).get(id);
+      const updated = { ...previous };
+      const columns = { full_name: 'fullName', contact_name: 'contactName', phone: 'phone', address: 'address', area: 'area' };
+      [...query.matchAll(/\b(full_name|contact_name|phone|address|area) = \?/gu)].forEach((match,index) => { updated[columns[match[1]]] = values[index]; });
+      connection.profileWrites.set(key, updated);
+      return [{ affectedRows: 1 }];
+    }
     assert.fail('Unexpected isolated Account statement.');
   }
   db.execute = (sql, values) => execute(null, sql, values);
   db.getConnection = async () => {
     fail('acquire');
     const connection = { id: ++connectionId, held: new Set(), active: false, accountWrites: new Map(),
-      sessionWrites: new Map(), auditWrites: [], released: false, destroyed: false };
+      sessionWrites: new Map(), profileWrites: new Map(), auditWrites: [], released: false, destroyed: false };
     function unlock() {
       for (const id of connection.held) {
         const lock = locks.get(id);
@@ -144,6 +183,7 @@ export function accountDatabase() {
     function commitWrites() {
       for (const [id, row] of connection.accountWrites) accounts.set(id, row);
       for (const [id, row] of connection.sessionWrites) sessions.set(id, row);
+      for (const [key, row] of connection.profileWrites) (key.startsWith('D:') ? donors : hospitals).set(key.slice(2), row);
       audits.push(...connection.auditWrites);
       connection.active = false; unlock();
     }
@@ -157,6 +197,7 @@ export function accountDatabase() {
       async rollback() {
         events.push(`${connection.id}:rollback`); fail('rollback');
         connection.accountWrites.clear(); connection.sessionWrites.clear(); connection.auditWrites.length = 0;
+        connection.profileWrites.clear();
         connection.active = false; unlock();
       },
       release() { fail('release'); assert.equal(connection.active, false); connection.released = true; },
