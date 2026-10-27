@@ -8,6 +8,7 @@ import { api } from '../../src/services/api';
 import '../../src/styles/global.css';
 import { runAccountApprovalScenarios } from './account-approval-scenarios';
 import { runAccountStatusScenarios } from './account-status-scenarios';
+import { runBookingScenarios } from './booking-scenarios';
 
 const container = document.getElementById('hospital-test-app');
 const report = document.getElementById('hospital-test-result');
@@ -22,6 +23,10 @@ const profile = (status = 'PENDING') => ({
 });
 const hospitalUser = (status = 'PENDING') => ({ accountId: '123', role: 'HOSPITAL', accountStatus: status });
 const adminUser = (status = 'ACTIVE') => ({ accountId: '31', role: 'ADMIN', accountStatus: status });
+const activeDonor = () => ({ accountId: '321', role: 'DONOR', accountStatus: 'ACTIVE' });
+const bookingSlots = () => [{ slotId: '40', startsAt: '2026-11-01T10:00:00+05:30', endsAt: '2026-11-01T11:00:00+05:30',
+  capacity: 1, occupied: 0, remaining: 1, slotStatus: 'OPEN', bookable: true,
+  eligibility: { result: 'ELIGIBLE', reasonCode: 'NO_BLOCKING_HISTORY', evaluationDate: '2026-11-01' } }];
 const approvalAccounts = () => Array.from({ length: 23 }, (_, index) => ({
   accountId: index ? String(2000 + index) : '9007199254740993',
   email: index ? `applicant${index}@example.test` : `${'long-email-'.repeat(15)}@example.test`,
@@ -59,7 +64,7 @@ async function mount(path, options = {}) {
   fixture = { user: null, profile: profile(), calls: [], csrf: 0, registrationConflict: null,
     profileFailures: 0, profileEmpty: false, holdProfile: false, loginRole: 'HOSPITAL',
     adminProfiles: adminProfiles(), adminListFailures: 0, adminDetailFailures: 0,
-    approvalAccounts: approvalAccounts(), queueFailures: 0, ...options };
+    approvalAccounts: approvalAccounts(), queueFailures: 0, bookingSlots: bookingSlots(), bookings: [], ...options };
   const current = fixture;
   api.defaults.adapter = async (config) => {
     const method = config.method.toLowerCase();
@@ -73,9 +78,67 @@ async function mount(path, options = {}) {
         : errorResponse(config, 401, 'AUTHENTICATION_REQUIRED', 'Sign in to continue.');
     }
     if (config.url === '/auth/csrf') {
+      if (current.holdBookingCsrf) { current.holdBookingCsrf = false; await new Promise(resolve => { current.releaseBookingCsrf = resolve; }); }
       if (current.statusCsrfFailure) { current.statusCsrfFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'PRIVATE'); }
       if (current.holdApprovalCsrf) { current.holdApprovalCsrf = false; await new Promise(resolve => { current.releaseApprovalCsrf = resolve; }); }
       return response(config, { success: true, csrfToken: (++current.csrf).toString(16).padStart(64, '0') });
+    }
+    if (config.url === '/donors/me/eligibility' && method === 'get') return response(config, { success: true,
+      eligibility: { result: 'ELIGIBLE', reasonCode: 'NO_BLOCKING_HISTORY', evaluationDate: '2026-10-27',
+        nextEligibleDate: null, deferredUntil: null, latestDecision: null } });
+    if (config.url === '/donation-slots' && method === 'get') {
+      if (current.bookingReadFailure) { current.bookingReadFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private details'); }
+      const slots = current.bookingSlots.filter(slot => current.user?.role === 'ADMIN'
+        ? (!config.params?.slotStatus || slot.slotStatus === config.params.slotStatus) : slot.slotStatus === 'OPEN');
+      const page = Number(config.params?.page ?? 1);
+      return response(config, { success: true, slots: structuredClone(slots.slice((page - 1) * 20, page * 20)), pagination: { page, pageSize: 20, total: slots.length } });
+    }
+    if (['/donors/me/bookings', '/admin/bookings'].includes(config.url) && method === 'get') {
+      if (current.bookingReadAuth) { current.bookingReadAuth = false; return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Session unavailable.'); }
+      if (current.bookingReadFailure) { current.bookingReadFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private details'); }
+      const admin = config.url === '/admin/bookings';
+      const rows = current.bookings.filter(row => (admin || row.donorAccountId === current.user?.accountId)
+        && (!config.params?.bookingStatus || row.bookingStatus === config.params.bookingStatus));
+      const page = Number(config.params?.page ?? 1);
+      return response(config, { success: true, bookings: structuredClone(rows.slice((page - 1) * 20, page * 20)), pagination: { page, pageSize: 20, total: rows.length } });
+    }
+    if ((config.url === '/admin/donation-slots' && method === 'post')
+      || (config.url.startsWith('/admin/donation-slots/') && method === 'patch')
+      || (config.url === '/donors/me/bookings' && method === 'post')
+      || (config.url.startsWith('/donors/me/bookings/') && method === 'post')) {
+      if (current.holdBookingMutation) { current.holdBookingMutation = false; await new Promise(resolve => { current.releaseBookingMutation = resolve; }); }
+      if (current.bookingMode === 'conflict') return errorResponse(config, 409, 'SLOT_CONFLICT', 'Changed');
+      if (current.bookingMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
+      if (current.bookingMode === 'validation') return errorResponse(config, 400, 'VALIDATION_ERROR', 'Check the entered values.');
+      let payload;
+      if (config.url === '/admin/donation-slots') {
+        const slot = { ...bookingSlots()[0], ...data, slotId: String(current.bookingSlots.length + 40) };
+        current.bookingSlots.push(slot); payload = { slot };
+      } else if (config.url.startsWith('/admin/donation-slots/')) {
+        const slot = current.bookingSlots.find(item => item.slotId === config.url.split('/').at(-1));
+        if (!slot) return errorResponse(config, 404, 'SLOT_NOT_FOUND', 'Missing');
+        Object.assign(slot, data.slotStatus === 'CANCELLED' ? { slotStatus: 'CANCELLED', occupied: 0, remaining: slot.capacity } : data.slotStatus === 'CLOSED' ? { slotStatus: 'CLOSED' } : data);
+        if (data.slotStatus === 'CANCELLED') current.bookings.filter(row => row.slotId === slot.slotId && row.bookingStatus === 'BOOKED')
+          .forEach(row => { row.bookingStatus = 'CANCELLED_BY_STAFF'; });
+        payload = { slot };
+      } else if (config.url === '/donors/me/bookings') {
+        const slot = current.bookingSlots.find(item => item.slotId === data.slotId);
+        if (!slot || slot.remaining < 1) return errorResponse(config, 409, 'SLOT_CONFLICT', 'Unavailable');
+        slot.occupied++; slot.remaining--;
+        const booking = { bookingId: String(current.bookings.length + 1), donorAccountId: current.user.accountId,
+          donorName: 'Fixture Donor', slotId: slot.slotId, bookingStatus: 'BOOKED', bookedAt: '2026-10-27T10:00:00+05:30',
+          statusChangedAt: '2026-10-27T10:00:00+05:30', cancellationReason: null,
+          startsAt: slot.startsAt, endsAt: slot.endsAt, slotStatus: slot.slotStatus, slot };
+        current.bookings.push(booking); payload = { booking };
+      } else {
+        const row = current.bookings.find(item => item.bookingId === config.url.split('/')[4]);
+        if (!row || row.bookingStatus !== 'BOOKED') return errorResponse(config, 409, 'BOOKING_CONFLICT', 'Changed');
+        row.bookingStatus = 'CANCELLED_BY_DONOR'; current.bookingSlots.find(slot => slot.slotId === row.slotId).remaining++;
+        payload = { booking: { bookingId: row.bookingId, bookingStatus: row.bookingStatus } };
+      }
+      if (current.bookingMode === 'malformed') payload = { booking: { bookingId: 'wrong' } };
+      if (current.failBookingRefresh) { current.failBookingRefresh = false; current.bookingReadFailure = true; }
+      return response(config, { success: true, ...payload }, config.url === '/admin/donation-slots' || config.url === '/donors/me/bookings' ? 201 : 200);
     }
     if (config.url === '/admin/accounts' && method === 'get') {
       if (current.expireAccounts) return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Session no longer available.');
@@ -178,7 +241,7 @@ async function submit() { container.querySelector('form').dispatchEvent(new Even
 function noOverflow() { assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, `No horizontal overflow at ${innerWidth}px`); }
 function labels() {
   for (const element of container.querySelectorAll('input,textarea,select')) {
-    assert(Boolean(element.id && container.querySelector(`label[for="${element.id}"]`)), `Accessible label for ${element.name}`);
+    assert(Boolean(element.labels?.length || (element.id && container.querySelector(`label[for="${element.id}"]`))), `Accessible label for ${element.name}`);
   }
 }
 async function run(name, work) {
@@ -191,6 +254,8 @@ async function scenarios() {
     container, adminUser, hospitalUser, run });
   await runAccountStatusScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
     container, adminUser, hospitalUser, run });
+  await runBookingScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
+    container, adminUser, activeDonor, run });
   await run('ACTIVE Admin list, Mint styling, pagination, scoped navigation and approved data only', async () => {
     await mount('/admin/hospitals', { user: adminUser() });
     await waitFor(() => container.querySelectorAll('.mint-admin-table tbody tr').length === 20, 'first Admin page');

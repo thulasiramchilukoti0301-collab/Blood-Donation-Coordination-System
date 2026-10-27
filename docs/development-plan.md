@@ -72,6 +72,8 @@ The one-time repository scaffold commit (`88fd043`, `chore: initialize project s
 
 ## Phase 6 — Donor and donation workflows
 
+The bounded eligibility/slot booking subset is now implemented in the current working tree using existing 005 and AuditEvent schema: ACTIVE Donor preview, slot browse, own booking/list/cancellation; ACTIVE Admin slot create/edit/close/cancel and read-only booking search. See `eligibility-booking.md` for exact decisions, the database-free verification boundary, and pending live MySQL/concurrency evidence. Staff day-of decisions, check-in/no-show/completion, donation outcomes/testing, and remaining donor/inventory workflows are still planned. This subset does not complete Phase 6 or Phase 3.
+
 - Implement donor profile management, eligibility checks, slot booking, and staff donation recording.
 - Connect donation records to blood unit creation and traceability.
 - **Deliverables:** integrated donor and donation workflows.

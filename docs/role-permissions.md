@@ -26,9 +26,9 @@ The broad Admin request-status permission does not resolve whether staff may can
 | Account status | Approve/suspend/reactivate non-admin accounts; every action audited | View own approval/status through current-account/profile screens | View own approval/status through current-account/profile screens |
 | Profile | View/update all operational profiles; approve/suspend/reactivate account | View/update permitted own hospital contact/profile fields while PENDING or ACTIVE | View/update permitted own donor profile fields while PENDING or ACTIVE |
 | Password | Change own password; no password material in responses/logs | Change own password while PENDING or ACTIVE | Change own password while PENDING or ACTIVE |
-| Donor eligibility | View history; record staff day-of acceptance/deferral and deferral date/reason category | None | View own advisory eligibility and next eligible date; no ability to mark accepted |
+| Donor eligibility | View history; staff day-of acceptance/deferral remains planned | None | ACTIVE Donor: view own advisory eligibility and next eligible date; no ability to mark accepted |
 | Donation history | View/search all; create/correct donation record with audited reason | None | View own records, read-only |
-| Donation slots | Create/manage slot availability; view all; cancel with reason; check in/no-show | None | View open slots; book/cancel own booking under cutoff; view own booking status |
+| Donation slots | ACTIVE Admin: create/manage future slots, list all, close/cancel with fixed audited reasons, view booking queue; check-in/no-show remains planned | None | ACTIVE Donor: view future OPEN slots, book under appointment-date eligibility/capacity/overlap rules, cancel own BOOKED reservation before start, view own history |
 | Testing/release | Record approval/rejection; Admin-only | None | No access to testing details; may see high-level donation outcome if approved for disclosure |
 | Blood groups/compatibility | View; manage approved reference data with audit (compatibility edits restricted to controlled admin operation) | View requestable groups | View own group if confirmed |
 | Blood units/inventory | Create from approved donation; view/search; discard with reason; run/review expiry; allocate/issue/deallocate | No unit-level inventory; may view request fulfillment | None |

@@ -11,6 +11,7 @@ import AccountStatusPage from './features/auth/AccountStatusPage';
 import HospitalProfilePage from './features/hospitals/HospitalProfilePage';
 import AdminHospitalManagement from './features/hospitals/AdminHospitalManagement';
 import AccountApprovalPage from './features/accounts/AccountApprovalPage';
+import { EligibilityPage, DonorSlotsPage, DonorBookingsPage, AdminSlotsPage, AdminBookingsPage } from './features/booking/BookingPages';
 
 const checking = { state: 'checking', message: 'Waiting for a health-check response…' };
 
@@ -76,9 +77,14 @@ export default function App() {
     <Route path="/" element={<FoundationHome />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/donor/profile" element={<DonorProfilePage />} />
+    <Route path="/donor/eligibility" element={<EligibilityPage />} />
+    <Route path="/donor/slots" element={<DonorSlotsPage />} />
+    <Route path="/donor/bookings" element={<DonorBookingsPage />} />
     <Route path="/hospital/profile" element={<HospitalProfilePage />} />
     <Route path="/admin/hospitals" element={<AdminHospitalManagement />} />
     <Route path="/admin/accounts" element={<AccountApprovalPage />} />
+    <Route path="/admin/donation-slots" element={<AdminSlotsPage />} />
+    <Route path="/admin/bookings" element={<AdminBookingsPage />} />
     <Route path="/account/status" element={<AccountStatusPage />} />
     <Route path="/unauthorized" element={<AuthLayout><section className="auth-intro"><p className="rose-eyebrow">Access denied</p><h1>This account cannot open this page</h1><p>Use the account navigation to view the pages available for your role.</p><a className="rose-action-link" href="/account/status">View account status</a></section></AuthLayout>} />
     <Route path="*" element={<NotFound />} />

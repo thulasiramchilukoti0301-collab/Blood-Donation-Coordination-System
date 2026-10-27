@@ -21,6 +21,8 @@ This repository is for the **Blood Donation Coordination System**, a college DBM
 
 ## Development conventions for future implementation
 
+The bounded eligibility and slot booking application milestone in the current working tree implements ACTIVE Donor advisory eligibility, own booking/list/cancellation, future slot browsing, and ACTIVE Admin slot management/read-only booking search using existing 005 and AuditEvent schema. It resolves appointment-date 56-day/decision checks, capacity/overlap, and fixed audited mutations within this scope; see `docs/eligibility-booking.md`. USER-RUN evidence reported 2026-10-27 covers advisory eligibility, slot browsing, booking persistence, Admin queue, creation audit observations and a separate capacity-one cancel/rebook flow; it does not establish live concurrency, rollback, expiry during lock waits or broader security. Historical automated results (280 backend/61 frontend) and the later reviewed-corrections run (290 backend/63 frontend plus fixture-browser checks) remain separately documented. This application milestone adds no SQL changes. Staff day-of decisions, attendance/status changes, donation/inventory workflows, remaining Phase 3 schema and permanent sample data still need separate authorization.
+
 - Use React for the frontend and Node.js/Express for the API backend.
 - Use MySQL as the system of record and `mysql2` for Node.js database access. Keep credentials outside source control in environment-specific configuration.
 - Hash passwords with bcrypt and use server-side sessions as selected in Phase 1; apply the documented cookie, CSRF, and role-authorization behavior consistently.
@@ -39,6 +41,7 @@ This repository is for the **Blood Donation Coordination System**, a college DBM
 - Apply donor eligibility and blood compatibility rules consistently in the backend and database operations where practical; document the authoritative rule set before implementation.
 - Use the approved daily MySQL Event Scheduler expiry design, subject to confirming target-server support during Phase 3.
 - In Phase 3, prepare reproducible SQL DDL/DML and at least ten sample rows for every major table listed in `docs/database-design.md`, after explicit authorization for the relevant work. The foundation milestone's eight BloodGroup lookup rows are not Account fixtures and do not satisfy the later ten-row requirement for each of the 12 major tables.
+- For every authorized future SQL change, hand off the reviewed file, owner, coordinated migration number/artifact type, source revision, dependency/setup order, target preflight, and verification instructions. Record each developer's local installation evidence separately; mark unobserved dates/revisions **UNKNOWN** in `database/migration-ledger.md`. Git synchronization never applies SQL.
 - Demonstrate the required relational concepts and operations listed in the scope, including a view and a stored procedure or function, at least one trigger, and expiry handling.
 
 ## Verification and documentation

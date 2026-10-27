@@ -29,9 +29,9 @@ export default function AuthLayout({ children, wide = false, theme = 'rose' }) {
           <nav className={`${prefix}-nav`} aria-label="Account navigation">
             {user ? <>
               {user.role === 'ADMIN' && user.accountStatus === 'ACTIVE'
-                ? <><Link to="/admin/hospitals" aria-current={pathname === '/admin/hospitals' ? 'page' : undefined}>Hospital management</Link><Link to="/admin/accounts" aria-current={pathname === '/admin/accounts' ? 'page' : undefined}>Account management</Link><Link to="/account/status" aria-current={pathname === '/account/status' ? 'page' : undefined}>Account status</Link></>
+                ? <><Link to="/admin/hospitals" aria-current={pathname === '/admin/hospitals' ? 'page' : undefined}>Hospital management</Link><Link to="/admin/accounts" aria-current={pathname === '/admin/accounts' ? 'page' : undefined}>Account management</Link><Link to="/admin/donation-slots" aria-current={pathname === '/admin/donation-slots' ? 'page' : undefined}>Slots</Link><Link to="/admin/bookings" aria-current={pathname === '/admin/bookings' ? 'page' : undefined}>Bookings</Link><Link to="/account/status" aria-current={pathname === '/account/status' ? 'page' : undefined}>Account status</Link></>
                 : user.role === 'HOSPITAL' ? <Link to="/hospital/profile" aria-current={pathname === '/hospital/profile' ? 'page' : undefined}>Hospital Profile</Link> : user.role === 'DONOR'
-                ? <Link to="/donor/profile">My profile</Link>
+                ? <><Link to="/donor/profile">My profile</Link>{user.accountStatus === 'ACTIVE' && <><Link to="/donor/eligibility">Eligibility</Link><Link to="/donor/slots">Slots</Link><Link to="/donor/bookings">My bookings</Link></>}</>
                 : <Link to="/account/status">Account status</Link>}
               <button className={`${prefix}-link-button`} type="button" onClick={() => void signOut()} disabled={logoutBusy}>{logoutBusy ? 'Signing out…' : 'Sign out'}</button>
             </> : <Link to="/login">Sign in</Link>}

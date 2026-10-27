@@ -7,6 +7,9 @@ import { createDonorProfileService } from '../donors/service.js';
 import { createAccountAdminRepository } from '../accounts/repository.js';
 import { createAccountAdminService } from '../accounts/service.js';
 import { createAccountAdminRouter } from '../accounts/router.js';
+import { createBookingRepository } from '../booking/repository.js';
+import { createBookingService } from '../booking/service.js';
+import { createBookingRouter } from '../booking/router.js';
 import { validateDonorRegistration, validateHospitalRegistration, validateLogin } from './validation.js';
 import { requireCurrentAccount, requireRole } from '../../middleware/auth.js';
 import { requireTrustedOriginAndCsrf } from '../../middleware/csrf.js';
@@ -24,6 +27,10 @@ function unavailableRouter() {
   router.use((req, res, next) => {
     const supported = (req.method === 'GET' && ['/auth/csrf', '/auth/me', '/donors/me'].includes(req.path))
       || (req.method === 'GET' && req.path === '/admin/accounts')
+      || (req.method === 'GET' && ['/donors/me/eligibility', '/donation-slots', '/donors/me/bookings', '/admin/bookings'].includes(req.path))
+      || (req.method === 'POST' && ['/admin/donation-slots', '/donors/me/bookings'].includes(req.path))
+      || (req.method === 'PATCH' && /^\/admin\/donation-slots\/[^/]+$/u.test(req.path))
+      || (req.method === 'POST' && /^\/donors\/me\/bookings\/[^/]+\/cancellation$/u.test(req.path))
       || (req.method === 'PATCH' && /^\/admin\/accounts\/[^/]+$/u.test(req.path))
       || (req.method === 'PATCH' && req.path === '/donors/me')
       || (req.method === 'POST' && ['/auth/register/donors', '/auth/register/hospitals', '/auth/login', '/auth/logout'].includes(req.path));
@@ -37,7 +44,7 @@ function unavailableRouter() {
   return router;
 }
 
-export function createAuthRouter({ authService, donorService, accountService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
+export function createAuthRouter({ authService, donorService, accountService, bookingService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
   const router = express.Router();
   const csrf = requireTrustedOriginAndCsrf(frontendUrl);
   const loginLimiter = createRateLimiter();
@@ -98,6 +105,7 @@ export function createAuthRouter({ authService, donorService, accountService, se
   });
 
   if (accountService) router.use(createAccountAdminRouter({ authService, accountService, frontendUrl }));
+  if (bookingService) router.use(createBookingRouter({ authService, bookingService, frontendUrl }));
 
   router.get('/auth/me', currentAccount, (req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -149,9 +157,10 @@ export function createAuthRuntime({ databasePool = pool, env = process.env, fron
   const authService = createAuthService({ repository });
   const donorService = createDonorProfileService({ repository: createDonorRepository(databasePool) });
   const accountService = createAccountAdminService({ repository: createAccountAdminRepository(databasePool), sessionStore });
+  const bookingService = createBookingService({ repository: createBookingRepository(databasePool) });
   return {
     middleware: persistentSessions.middleware,
-    router: createAuthRouter({ authService, donorService, accountService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
+    router: createAuthRouter({ authService, donorService, accountService, bookingService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
     sessionStore,
   };
 }
