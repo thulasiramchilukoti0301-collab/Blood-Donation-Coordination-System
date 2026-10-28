@@ -67,13 +67,106 @@ export async function runBookingScenarios({ mount, waitFor, assert, text, button
     assert(mutation?.data.reason === 'STAFF_CANCELLED' && mutation.data.slotStatus === 'CANCELLED', 'Exact controlled action');
     labels(); noOverflow();
   });
-  await run('Admin booking queue shows only minimal Donor identity with filter and no attendance mutation', async () => {
+  await run('Admin booking queue offers guarded check-in for an active donor appointment', async () => {
+    const start = new Date(Date.now() - 60_000).toISOString(); const end = new Date(Date.now() + 60 * 60_000).toISOString();
     const f = await mount('/admin/bookings', { user: adminUser(), bookings: [{ bookingId: '1', donorAccountId: '321', donorName: 'Fixture Donor',
-      slotId: '40', bookingStatus: 'BOOKED', bookedAt: '2026-10-27T10:00:00+05:30',
-      statusChangedAt: '2026-10-27T10:00:00+05:30', startsAt: '2026-11-01T10:00:00+05:30', endsAt: '2026-11-01T11:00:00+05:30' }] });
+      donorAccountStatus: 'ACTIVE', hasDonation: false, latestDecision: null, slotId: '40', slotStatus: 'OPEN', bookingStatus: 'BOOKED', bookedAt: start,
+      statusChangedAt: start, startsAt: start, endsAt: end }] });
     await waitFor(() => text().includes('Fixture Donor'), 'Admin booking fixture');
-    assert(text().includes('Check-in and attendance actions are planned'), 'No attendance control claimed');
-    assert(!f.calls.some(call => call.method === 'patch' && call.url.includes('/bookings/')), 'No status mutation');
+    assert(Boolean(button('Check in')), 'Eligible active Donor has check-in action');
+    button('Check in').click(); await waitFor(() => confirmation(), 'check-in confirmation');
+    assert(text().includes('BOOKED to CHECKED_IN') && text().includes('does not create a donation'), 'Confirmation states identity transition and boundary');
+    button('Cancel').click(); await pause();
+    assert(!f.calls.some(call => call.url === '/admin/bookings/1/status'), 'Cancel performs no mutation');
+    button('Check in').click(); await waitFor(() => confirmation(), 'check-in confirmation'); button('Confirm check in').click();
+    await waitFor(() => text().includes('Check in was saved.') && text().includes('Status: CHECKED_IN'), 'checked-in row refreshed');
+    const mutation = f.calls.find(call => call.url === '/admin/bookings/1/status' && call.method === 'patch');
+    assert(JSON.stringify(mutation.data) === JSON.stringify({ bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }), 'Exact check-in contract');
+    assert(Boolean(mutation.headers['x-csrf-token']), 'Fresh CSRF used');
+    labels(); noOverflow();
+  });
+  await run('Admin day-of decision is accessible, visit-scoped, append-only, and uses exact fixed request', async () => {
+    const start = new Date(Date.now() - 60_000).toISOString(); const end = new Date(Date.now() + 60 * 60_000).toISOString();
+    const f = await mount('/admin/bookings', { user: adminUser(), bookings: [{ bookingId: '1', donorAccountId: '321', donorName: 'Fixture Donor',
+      donorAccountStatus: 'ACTIVE', hasDonation: false, latestDecision: 'REVIEW_REQUIRED', latestDeferredUntil: null,
+      slotId: '40', slotStatus: 'OPEN', bookingStatus: 'CHECKED_IN', bookedAt: start, statusChangedAt: start, startsAt: start, endsAt: end }] });
+    await waitFor(() => button('Review decision'), 'day-of decision control');
+    assert(text().includes('Latest staff decision: REVIEW REQUIRED'), 'Current decision context shown');
+    assert(container.querySelector('[aria-label="Day-of eligibility decision for booking 1"]'), 'Decision control has accessible label');
+    await fill({ 'decision-1': 'TEMPORARILY_DEFERRED' });
+    assert(Boolean(container.querySelector('[name="deferredUntil-1"]')), 'Deferral requires a date');
+    const deferredUntil = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    await fill({ 'deferredUntil-1': deferredUntil });
+    button('Review decision').click(); await waitFor(() => confirmation(), 'decision confirmation');
+    assert(text().includes('TEMPORARILY DEFERRED') && text().includes('Fixture Donor')
+      && text().includes(`through ${deferredUntil}, inclusive in India Standard Time`), 'Confirmation identifies donor, decision, and captured inclusive IST date');
+    button('Cancel').click(); await pause();
+    assert(!f.calls.some(call => call.url.endsWith('/eligibility-decisions')), 'Cancel sends no decision');
+    button('Review decision').click(); await waitFor(() => confirmation(), 'decision confirmation after cancel'); button('Confirm record eligibility decision').click();
+    await waitFor(() => text().includes('Record eligibility decision was saved.') && text().includes('TEMPORARILY DEFERRED'), 'saved decision displayed after refresh');
+    const mutation = f.calls.find(call => call.url === '/admin/donors/321/eligibility-decisions' && call.method === 'post');
+    assert(mutation?.data.bookingId === '1' && mutation.data.decision === 'TEMPORARILY_DEFERRED'
+      && mutation.data.deferredUntil === deferredUntil && mutation.data.reasonCode === undefined && mutation.data.safeNote === undefined,
+    'Exact bounded request includes the captured date; no client reason or notes');
+    const saved = f.calls.find(call => call.url.endsWith('/eligibility-decisions'));
+    assert(saved, 'Decision mutation was dispatched with a valid complete response');
+    labels(); noOverflow();
+  });
+  await run('Deferred decision response must match captured date and contain a valid decision ID', async () => {
+    for (const [mode, expected] of [['wrong-date', 'mismatched date'], ['missing-date', 'missing date'], ['invalid-id', 'invalid ID']]) {
+      const start = new Date(Date.now() - 60_000).toISOString(); const end = new Date(Date.now() + 60 * 60_000).toISOString();
+      const f = await mount('/admin/bookings', { user: adminUser(), eligibilityDecisionMode: mode, bookings: [{ bookingId: '1', donorAccountId: '321',
+        donorName: 'Fixture Donor', donorAccountStatus: 'ACTIVE', hasDonation: false, latestDecision: null, slotId: '40', slotStatus: 'OPEN',
+        bookingStatus: 'CHECKED_IN', bookedAt: start, statusChangedAt: start, startsAt: start, endsAt: end }] });
+      await waitFor(() => button('Review decision'), `${expected} fixture`);
+      await fill({ 'decision-1': 'TEMPORARILY_DEFERRED' });
+      const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      await fill({ 'deferredUntil-1': date }); button('Review decision').click();
+      await waitFor(() => text().includes(`through ${date}, inclusive in India Standard Time`), `${expected} confirmation`);
+      button('Confirm record eligibility decision').click();
+      await waitFor(() => text().includes('outcome could not be confirmed'), `${expected} uncertain outcome`);
+      assert(!text().includes('Record eligibility decision was saved.'), `${expected} cannot display success`);
+      assert(f.calls.filter(call => call.url.endsWith('/eligibility-decisions') && call.method === 'post').length === 1,
+        `${expected} is not retried`);
+      assert(f.calls.filter(call => call.url === '/admin/bookings' && call.method === 'get').length >= 2,
+        `${expected} recovery uses a list read`);
+      noOverflow();
+    }
+  });
+  await run('Admin booking CSRF preflight becomes obsolete after booking query changes', async () => {
+    const start = new Date(Date.now() - 60_000).toISOString(); const end = new Date(Date.now() + 60 * 60_000).toISOString();
+    const f = await mount('/admin/bookings', { user: adminUser(), holdBookingCsrf: true, bookings: [{ bookingId: '1', donorAccountId: '321',
+      donorName: 'Fixture Donor', donorAccountStatus: 'ACTIVE', slotId: '40', slotStatus: 'OPEN', bookingStatus: 'BOOKED',
+      hasDonation: false, startsAt: start, endsAt: end, bookedAt: start, statusChangedAt: start }] });
+    await waitFor(() => button('Check in'), 'eligible check-in'); button('Check in').click(); await waitFor(() => confirmation(), 'confirm check-in');
+    button('Confirm check in').click(); await waitFor(() => f.releaseBookingCsrf, 'held CSRF');
+    await fill({ bookingStatus: 'BOOKED' }); button('Search').click(); await waitFor(() => !confirmation(), 'query clears old confirmation');
+    f.releaseBookingCsrf(); await pause(30);
+    assert(!f.calls.some(call => call.url === '/admin/bookings/1/status'), 'Obsolete CSRF preflight does not dispatch PATCH');
+    assert(!container.querySelector('.booking-notice,.booking-confirm'), 'Obsolete preflight cannot change current feedback');
+  });
+  await run('Admin in-flight check-in remains single-dispatch and old result cannot change a new query', async () => {
+    const start = new Date(Date.now() - 60_000).toISOString(); const end = new Date(Date.now() + 60 * 60_000).toISOString();
+    const f = await mount('/admin/bookings', { user: adminUser(), holdBookingMutation: true, bookings: [{ bookingId: '1', donorAccountId: '321',
+      donorName: 'Fixture Donor', donorAccountStatus: 'ACTIVE', slotId: '40', slotStatus: 'OPEN', bookingStatus: 'BOOKED',
+      hasDonation: false, startsAt: start, endsAt: end, bookedAt: start, statusChangedAt: start }] });
+    await waitFor(() => button('Check in'), 'eligible check-in'); button('Check in').click(); await waitFor(() => confirmation(), 'confirmation');
+    button('Confirm check in').click(); await waitFor(() => f.releaseBookingMutation, 'dispatched PATCH');
+    await fill({ bookingStatus: 'CHECKED_IN' }); button('Search').click(); await waitFor(() => text().includes('No bookings match'), 'new query ready');
+    assert(text().includes('An action is still in progress'), 'Duplicate guard remains across query change');
+    f.releaseBookingMutation(); await waitFor(() => !text().includes('An action is still in progress'), 'mutation settled');
+    assert(!container.querySelector('.booking-notice,.booking-confirm'), 'Obsolete success has no effect on current view');
+    assert(f.calls.filter(call => call.url === '/admin/bookings/1/status' && call.method === 'patch').length === 1, 'Mutation not retried');
+    labels(); noOverflow();
+  });
+  await run('Admin staff actions are hidden for inactive donors or visits with a Donation', async () => {
+    const start = new Date(Date.now() - 60_000).toISOString(); const end = new Date(Date.now() + 60 * 60_000).toISOString();
+    await mount('/admin/bookings', { user: adminUser(), bookings: [
+      { bookingId: '1', donorAccountId: '321', donorName: 'Inactive fixture', donorAccountStatus: 'SUSPENDED', slotId: '40', slotStatus: 'OPEN', bookingStatus: 'BOOKED', hasDonation: false, startsAt: start, endsAt: end },
+      { bookingId: '2', donorAccountId: '322', donorName: 'Donation fixture', donorAccountStatus: 'ACTIVE', slotId: '41', slotStatus: 'OPEN', bookingStatus: 'CHECKED_IN', hasDonation: true, startsAt: start, endsAt: end },
+    ] });
+    await waitFor(() => text().includes('Inactive fixture') && text().includes('Donation fixture'), 'ineligible rows');
+    assert(!button('Check in') && !button('Review decision'), 'UI hides actions outside the bounded eligibility conditions');
     labels(); noOverflow();
   });
   await run('Conflict and uncertain booking outcomes use reads without blind mutation retries', async () => {

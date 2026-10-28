@@ -104,6 +104,8 @@ async function mount(path, options = {}) {
     }
     if ((config.url === '/admin/donation-slots' && method === 'post')
       || (config.url.startsWith('/admin/donation-slots/') && method === 'patch')
+      || (config.url.startsWith('/admin/bookings/') && config.url.endsWith('/status') && method === 'patch')
+      || (config.url.startsWith('/admin/donors/') && config.url.endsWith('/eligibility-decisions') && method === 'post')
       || (config.url === '/donors/me/bookings' && method === 'post')
       || (config.url.startsWith('/donors/me/bookings/') && method === 'post')) {
       if (current.holdBookingMutation) { current.holdBookingMutation = false; await new Promise(resolve => { current.releaseBookingMutation = resolve; }); }
@@ -121,6 +123,21 @@ async function mount(path, options = {}) {
         if (data.slotStatus === 'CANCELLED') current.bookings.filter(row => row.slotId === slot.slotId && row.bookingStatus === 'BOOKED')
           .forEach(row => { row.bookingStatus = 'CANCELLED_BY_STAFF'; });
         payload = { slot };
+      } else if (config.url.startsWith('/admin/bookings/') && config.url.endsWith('/status')) {
+        const id = config.url.split('/')[3]; const row = current.bookings.find(item => item.bookingId === id);
+        if (!row || row.bookingStatus !== 'BOOKED' || data?.bookingStatus !== 'CHECKED_IN' || data?.reason !== 'STAFF_CHECKED_IN') {
+          return errorResponse(config, 409, 'BOOKING_CONFLICT', 'Changed');
+        }
+        row.bookingStatus = 'CHECKED_IN'; payload = { booking: { bookingId: row.bookingId, donorAccountId: row.donorAccountId, bookingStatus: row.bookingStatus } };
+      } else if (config.url.startsWith('/admin/donors/') && config.url.endsWith('/eligibility-decisions')) {
+        const row = current.bookings.find(item => item.bookingId === String(data?.bookingId));
+        if (!row || row.bookingStatus !== 'CHECKED_IN' || row.donorAccountId !== config.url.split('/')[3]) return errorResponse(config, 409, 'ELIGIBILITY_DECISION_CONFLICT', 'Changed');
+        row.latestDecision = data.decision; row.latestDeferredUntil = data.deferredUntil ?? null;
+        payload = { eligibilityDecision: { eligibilityDecisionId: '501', bookingId: row.bookingId, donorAccountId: row.donorAccountId,
+          decision: data.decision, reasonCode: ({ ACCEPTED: 'STAFF_ACCEPTED', TEMPORARILY_DEFERRED: 'STAFF_TEMPORARY_DEFERRAL', REVIEW_REQUIRED: 'STAFF_REVIEW_REQUIRED' })[data.decision], deferredUntil: data.deferredUntil ?? null } };
+        if (current.eligibilityDecisionMode === 'wrong-date') payload.eligibilityDecision.deferredUntil = '2099-12-31';
+        if (current.eligibilityDecisionMode === 'missing-date') delete payload.eligibilityDecision.deferredUntil;
+        if (current.eligibilityDecisionMode === 'invalid-id') payload.eligibilityDecision.eligibilityDecisionId = '0';
       } else if (config.url === '/donors/me/bookings') {
         const slot = current.bookingSlots.find(item => item.slotId === data.slotId);
         if (!slot || slot.remaining < 1) return errorResponse(config, 409, 'SLOT_CONFLICT', 'Unavailable');
@@ -138,7 +155,8 @@ async function mount(path, options = {}) {
       }
       if (current.bookingMode === 'malformed') payload = { booking: { bookingId: 'wrong' } };
       if (current.failBookingRefresh) { current.failBookingRefresh = false; current.bookingReadFailure = true; }
-      return response(config, { success: true, ...payload }, config.url === '/admin/donation-slots' || config.url === '/donors/me/bookings' ? 201 : 200);
+      return response(config, { success: true, ...payload }, config.url === '/admin/donation-slots' || config.url === '/donors/me/bookings'
+        || config.url.endsWith('/eligibility-decisions') ? 201 : 200);
     }
     if (config.url === '/admin/accounts' && method === 'get') {
       if (current.expireAccounts) return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Session no longer available.');

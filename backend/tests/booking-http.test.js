@@ -15,6 +15,8 @@ async function fixture(principal) {
     async createSlot(id, body, session) { calls.push(['createSlot', id, body, session]); return { slotId: '3' }; },
     async updateSlot(id, slotId, body, session) { calls.push(['updateSlot', id, slotId, body, session]); return { slotId }; },
     async cancelBooking(id, bookingId, body, session) { calls.push(['cancelBooking', id, bookingId, body, session]); return { bookingId }; },
+    async checkIn(id, bookingId, body, session) { calls.push(['checkIn', id, bookingId, body, session]); return { bookingId, bookingStatus: 'CHECKED_IN' }; },
+    async recordEligibilityDecision(id, donorId, body, session) { calls.push(['recordEligibilityDecision', id, donorId, body, session]); return { donorAccountId: donorId }; },
   };
   const app = express(); app.use(express.json());
   app.use((req, _res, next) => { req.sessionID = 'test-sid'; req.session = { auth: principal, csrfToken: token, destroy(done) { done(); } }; next(); });
@@ -58,4 +60,41 @@ test('Admin list and slot mutation remain role-scoped and reject unexpected quer
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token }, body: JSON.stringify({ startsAt: '2026-11-01T10:00:00+05:30', endsAt: '2026-11-01T11:00:00+05:30', capacity: 1 }) });
     assert.equal(extra.status, 400); assert.equal(f.calls.length, 1);
   } finally { await f.close(); }
+});
+
+test('staff check-in and day-of decision use exact Admin routes, CSRF, and session-derived actor', async () => {
+  const f = await fixture({ accountId: '1', role: 'ADMIN', accountStatus: 'ACTIVE' });
+  try {
+    const checkin = await fetch(`${f.base}/admin/bookings/42/status`, { method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', 'X-CSRF-Token': token },
+      body: JSON.stringify({ bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }) });
+    assert.equal(checkin.status, 200); assert.equal((await checkin.json()).booking.bookingStatus, 'CHECKED_IN');
+    const decision = await fetch(`${f.base}/admin/donors/10/eligibility-decisions`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', 'X-CSRF-Token': token },
+      body: JSON.stringify({ bookingId: '42', decision: 'ACCEPTED' }) });
+    assert.equal(decision.status, 201);
+    assert.deepEqual(f.calls.filter(call => ['checkIn', 'recordEligibilityDecision'].includes(call[0])).map(call => call.slice(0, 4)), [
+      ['checkIn', '1', '42', { bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }],
+      ['recordEligibilityDecision', '1', '10', { bookingId: '42', decision: 'ACCEPTED' }],
+    ]);
+    assert.equal(f.calls[0][4].principal.accountId, '1');
+    const missingCsrf = await fetch(`${f.base}/admin/bookings/42/status`, { method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }) });
+    assert.equal(missingCsrf.status, 403); assert.equal(f.calls.filter(call => call[0] === 'checkIn').length, 1);
+  } finally { await f.close(); }
+});
+
+test('non-Admin and non-ACTIVE Admin cannot use staff booking mutations', async () => {
+  for (const [principal, status] of [
+    [{ accountId: '10', role: 'DONOR', accountStatus: 'ACTIVE' }, 403],
+    [{ accountId: '1', role: 'ADMIN', accountStatus: 'PENDING' }, 401],
+  ]) {
+    const f = await fixture(principal);
+    try {
+      const response = await fetch(`${f.base}/admin/bookings/42/status`, { method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token },
+        body: JSON.stringify({ bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }) });
+      assert.equal(response.status, status); assert.equal(f.calls.length, 0);
+    } finally { await f.close(); }
+  }
 });

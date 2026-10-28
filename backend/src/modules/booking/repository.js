@@ -14,7 +14,15 @@ const bookingProjection = `CAST(b.booking_id AS CHAR) AS bookingId,
   b.cancellation_reason AS cancellationReason,
   DATE_FORMAT(s.starts_at, '%Y-%m-%d %H:%i:%s') AS startsAt,
   DATE_FORMAT(s.ends_at, '%Y-%m-%d %H:%i:%s') AS endsAt,
-  s.slot_status AS slotStatus`;
+  s.slot_status AS slotStatus,
+  a.account_status AS donorAccountStatus,
+  EXISTS (SELECT 1 FROM Donation dx WHERE dx.booking_id = b.booking_id) AS hasDonation,
+  (SELECT ed.decision FROM EligibilityDecision ed WHERE ed.booking_id = b.booking_id
+    ORDER BY ed.decided_at DESC, ed.eligibility_decision_id DESC LIMIT 1) AS latestDecision,
+  (SELECT DATE_FORMAT(ed.deferred_until, '%Y-%m-%d') FROM EligibilityDecision ed WHERE ed.booking_id = b.booking_id
+    ORDER BY ed.decided_at DESC, ed.eligibility_decision_id DESC LIMIT 1) AS latestDeferredUntil,
+  (SELECT DATE_FORMAT(ed.decided_at, '%Y-%m-%d %H:%i:%s') FROM EligibilityDecision ed WHERE ed.booking_id = b.booking_id
+    ORDER BY ed.decided_at DESC, ed.eligibility_decision_id DESC LIMIT 1) AS latestDecisionAt`;
 const pageSize = 20;
 const maximumId = 18446744073709551615n;
 function persistedId(value) {
@@ -29,15 +37,22 @@ const slot = row => ({ slotId: String(row.slotId), startsAt: timestamp(row.start
   capacity: Number(row.capacity), occupied: Number(row.occupied), remaining: Number(row.capacity) - Number(row.occupied),
   slotStatus: row.slotStatus });
 const booking = (row, admin) => ({ bookingId: String(row.bookingId), ...(admin ? { donorAccountId: String(row.donorAccountId),
-  donorName: row.donorName } : {}), slotId: String(row.slotId), bookingStatus: row.bookingStatus,
+  donorName: row.donorName, donorAccountStatus: row.donorAccountStatus } : {}), slotId: String(row.slotId), bookingStatus: row.bookingStatus,
   bookedAt: timestamp(row.bookedAt), statusChangedAt: timestamp(row.statusChangedAt),
   cancellationReason: row.cancellationReason, startsAt: timestamp(row.startsAt), endsAt: timestamp(row.endsAt),
-  slotStatus: row.slotStatus });
+  slotStatus: row.slotStatus, hasDonation: row.hasDonation === true || row.hasDonation === 1 || row.hasDonation === '1', latestDecision: row.latestDecision ?? null,
+  latestDeferredUntil: row.latestDeferredUntil ?? null, latestDecisionAt: row.latestDecisionAt ? timestamp(row.latestDecisionAt) : null });
 
 export function createBookingRepository(database) {
   if (!database) throw new TypeError('A database pool is required.');
   return {
-    transaction(actorId, work) { return withAccountLocks(database, [actorId], work); },
+    transaction(actorId, work, targetAccountIds = []) { return withAccountLocks(database, [actorId, ...targetAccountIds], work); },
+    async bookingOwnerHint(bookingId) {
+      const [rows] = await database.execute(`SELECT CAST(donor_account_id AS CHAR) AS donorAccountId,
+        CAST(slot_id AS CHAR) AS slotId
+        FROM Booking WHERE booking_id = ? LIMIT 1`, [bookingId]);
+      return rows[0] ? { donorAccountId: rows[0].donorAccountId, slotId: rows[0].slotId } : null;
+    },
     async history(donorId, connection = database) {
       const [donations] = await connection.execute(`SELECT DATE_FORMAT(d.collected_at, '%Y-%m-%d') AS lastCollectedDate
         FROM Donation d JOIN Booking b ON b.booking_id = d.booking_id
@@ -94,6 +109,23 @@ export function createBookingRepository(database) {
         FROM Booking WHERE booking_id = ? AND donor_account_id = ? FOR UPDATE`, [bookingId, donorId]);
       return rows[0] ?? null;
     },
+    async lockAdminBooking(connection, bookingId) {
+      const [rows] = await connection.execute(`SELECT CAST(booking_id AS CHAR) AS bookingId,
+        CAST(donor_account_id AS CHAR) AS donorAccountId, CAST(slot_id AS CHAR) AS slotId,
+        booking_status AS bookingStatus FROM Booking WHERE booking_id = ? FOR UPDATE`, [bookingId]);
+      return rows[0] ?? null;
+    },
+    async bookingHasDonation(connection, bookingId) {
+      const [rows] = await connection.execute('SELECT donation_id FROM Donation WHERE booking_id = ? FOR UPDATE', [bookingId]);
+      return rows.length > 0;
+    },
+    async latestBookingDecision(connection, bookingId) {
+      const [rows] = await connection.execute(`SELECT decision,
+        DATE_FORMAT(deferred_until, '%Y-%m-%d') AS deferredUntil
+        FROM EligibilityDecision WHERE booking_id = ?
+        ORDER BY decided_at DESC, eligibility_decision_id DESC LIMIT 1 FOR UPDATE`, [bookingId]);
+      return rows[0] ?? null;
+    },
     async insertSlot(connection, actorId, input) {
       const [result] = await connection.execute(`INSERT INTO DonationSlot
         (starts_at, ends_at, capacity, created_by_account_id) VALUES (?, ?, ?, ?)`, [input.start.local, input.end.local, input.capacity, actorId]);
@@ -117,6 +149,12 @@ export function createBookingRepository(database) {
         status_changed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND booking_status = 'BOOKED'`, [status, reason, bookingId]);
       return result.affectedRows;
     },
+    async insertEligibilityDecision(connection, donorId, bookingId, actorId, decision, reasonCode, deferredUntil) {
+      const [result] = await connection.execute(`INSERT INTO EligibilityDecision
+        (donor_account_id, booking_id, decided_by_account_id, decision, reason_code, deferred_until)
+        VALUES (?, ?, ?, ?, ?, ?)`, [donorId, bookingId, actorId, decision, reasonCode, deferredUntil]);
+      return persistedId(result.insertId);
+    },
     async listSlots(query, admin) {
       const where = [admin ? '1=1' : "s.slot_status = 'OPEN'", admin ? '1=1' : 's.starts_at > NOW()'];
       const values = [];
@@ -139,7 +177,7 @@ export function createBookingRepository(database) {
       if (query.from) { where.push('DATE(s.starts_at) >= ?'); values.push(query.from); }
       if (query.to) { where.push('DATE(s.starts_at) <= ?'); values.push(query.to); }
       const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const join = `FROM Booking b JOIN DonationSlot s ON s.slot_id = b.slot_id${admin ? ' JOIN Donor d ON d.account_id = b.donor_account_id' : ''}`;
+      const join = `FROM Booking b JOIN DonationSlot s ON s.slot_id = b.slot_id JOIN Account a ON a.account_id = b.donor_account_id${admin ? ' JOIN Donor d ON d.account_id = b.donor_account_id' : ''}`;
       const [totalRows] = await database.execute(`SELECT COUNT(*) AS total ${join} ${condition}`, values);
       const [rows] = await database.execute(`SELECT ${bookingProjection}${admin ? ', d.full_name AS donorName' : ''}
         ${join} ${condition} ORDER BY s.starts_at DESC, b.booking_id DESC LIMIT ? OFFSET ?`,

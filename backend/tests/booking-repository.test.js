@@ -45,3 +45,30 @@ test('inserted unsigned BIGINT IDs stay exact strings and unsafe driver numbers 
   const unsafe = { async execute() { return [{ insertId: Number.MAX_SAFE_INTEGER + 1 }]; } };
   await assert.rejects(repository.insertBooking(unsafe, '10', '40'), /Invalid inserted identifier/u);
 });
+
+test('booking lists expose only safe status/decision context and use deterministic latest-decision ordering', async () => {
+  const calls = [];
+  const database = { async execute(sql, params) {
+    calls.push({ sql, params });
+    if (sql.includes('COUNT(*) AS total')) return [[{ total: 1 }]];
+    return [[{ bookingId: '42', donorAccountId: '10', donorName: 'Fixture Donor', donorAccountStatus: 'ACTIVE',
+      slotId: '40', bookingStatus: 'CHECKED_IN', bookedAt: '2026-10-27 09:00:00', statusChangedAt: '2026-10-27 10:00:00',
+      cancellationReason: null, startsAt: '2026-10-27 10:00:00', endsAt: '2026-10-27 11:00:00', slotStatus: 'CLOSED',
+      hasDonation: '0', latestDecision: 'REVIEW_REQUIRED', latestDeferredUntil: null, latestDecisionAt: '2026-10-27 10:15:00' }]];
+  } };
+  const repository = createBookingRepository(database);
+  const admin = await repository.listBookings({ page: 1 }, null);
+  const donor = await repository.listBookings({ page: 1 }, '10');
+  assert.equal(admin.bookings[0].donorAccountStatus, 'ACTIVE');
+  assert.equal(admin.bookings[0].donorName, 'Fixture Donor');
+  assert.equal(admin.bookings[0].hasDonation, false);
+  assert.equal(admin.bookings[0].latestDecision, 'REVIEW_REQUIRED');
+  assert.equal(admin.bookings[0].latestDecisionAt, '2026-10-27T10:15:00+05:30');
+  assert.equal(Object.hasOwn(donor.bookings[0], 'donorName'), false);
+  assert.equal(Object.hasOwn(donor.bookings[0], 'donorAccountId'), false);
+  assert.equal(donor.bookings[0].latestDecision, 'REVIEW_REQUIRED');
+  assert.match(calls[1].sql, /EXISTS \(SELECT 1 FROM Donation/u);
+  assert.match(calls[1].sql, /ORDER BY ed\.decided_at DESC, ed\.eligibility_decision_id DESC LIMIT 1/u);
+  assert.match(calls[1].sql, /JOIN Account a ON a\.account_id = b\.donor_account_id/u);
+  assert.deepEqual(calls[1].params, [20, 0]);
+});

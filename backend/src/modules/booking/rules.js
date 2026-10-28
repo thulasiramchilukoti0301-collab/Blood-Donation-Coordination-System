@@ -79,6 +79,18 @@ export function slotPatch(body) {
     start: body.startsAt === undefined ? undefined : localDateTime(body.startsAt),
     end: body.endsAt === undefined ? undefined : localDateTime(body.endsAt) };
 }
+export function eligibilityDecisionInput(body) {
+  fields(body, ['bookingId', 'decision', 'deferredUntil'], ['bookingId', 'decision']);
+  const bookingId = id(body.bookingId);
+  if (!['ACCEPTED', 'TEMPORARILY_DEFERRED', 'REVIEW_REQUIRED'].includes(body.decision)) throw invalid();
+  if (body.decision === 'TEMPORARILY_DEFERRED') {
+    if (typeof body.deferredUntil !== 'string') throw invalid();
+    const date = localDateTime(`${body.deferredUntil}T00:00:00+05:30`).date;
+    return { bookingId, decision: body.decision, deferredUntil: date };
+  }
+  if (Object.hasOwn(body, 'deferredUntil')) throw invalid();
+  return { bookingId, decision: body.decision, deferredUntil: null };
+}
 export function bookingQuery(query = {}, admin = false) {
   fields(query, admin ? ['donor', 'bookingStatus', 'from', 'to', 'page'] : ['bookingStatus', 'from', 'to', 'page']);
   const statuses = ['BOOKED', 'CANCELLED_BY_DONOR', 'CANCELLED_BY_STAFF', 'CHECKED_IN', 'NO_SHOW', 'COMPLETED'];

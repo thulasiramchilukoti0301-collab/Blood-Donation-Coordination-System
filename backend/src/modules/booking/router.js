@@ -48,5 +48,16 @@ export function createBookingRouter({ authService, bookingService, frontendUrl }
     try { res.json({ success: true, ...await bookingService.bookings(req.query, { admin: true }) }); }
     catch (error) { next(error); }
   });
+  router.patch('/admin/bookings/:bookingId/status', ...admin, csrf, async (req, res, next) => {
+    try { noQuery(req); res.json({ success: true,
+      booking: await bookingService.checkIn(req.authAccount.accountId, req.params.bookingId, req.body, req.authSession) }); }
+    catch (error) { next(error); }
+  });
+  router.post('/admin/donors/:donorId/eligibility-decisions', ...admin, csrf, async (req, res, next) => {
+    try { noQuery(req); res.status(201).json({ success: true,
+      eligibilityDecision: await bookingService.recordEligibilityDecision(req.authAccount.accountId,
+        req.params.donorId, req.body, req.authSession) }); }
+    catch (error) { next(error); }
+  });
   return router;
 }

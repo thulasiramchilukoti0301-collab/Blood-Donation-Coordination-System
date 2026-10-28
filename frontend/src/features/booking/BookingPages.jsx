@@ -14,6 +14,7 @@ const apiTime = value => `${value}${value.length === 16 ? ':00' : ''}+05:30`;
 const validLocal = value => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/u.test(value);
 const positiveId = value => /^[1-9][0-9]{0,19}$/u.test(value);
 const copy = value => JSON.parse(JSON.stringify(value));
+const todayIst = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 function Shell({ role, theme, children }) {
   const auth = useAuth();
@@ -88,7 +89,7 @@ function useConfirmation(list, auth) {
   }
   function select(event, action) {
     if (busyRef.current) return;
-    trigger.current = event.currentTarget;
+    trigger.current = event.nativeEvent?.submitter ?? event.currentTarget;
     const value = Object.freeze({ ...action, captured: copy(action.captured), key: list.key, life });
     selectedRef.current = value; setSelected(value); setNotice(null);
   }
@@ -107,7 +108,7 @@ function useConfirmation(list, auth) {
       setNotice({ kind: 'success', text: `${choice.label} was saved.` });
       clear(); list.reload(true);
     } catch (error) {
-      if (!isCurrent()) return;
+      if (!isCurrent()) { if (selectedRef.current === choice) clear(); return; }
       const message = bookingMutationMessage(error);
       if (!message) return;
       setNotice(message); clear();
@@ -237,10 +238,11 @@ function BookingList({ auth, admin }) {
   const list = useList((query, signal) => admin ? bookingApi.adminBookings(query, signal) : bookingApi.ownBookings(query, signal), { page: 1 }, auth);
   const action = useConfirmation(list, auth);
   const [filters, setFilters] = useState({ bookingStatus: '', donor: '', from: '', to: '' });
+  const [decisionDrafts, setDecisionDrafts] = useState({});
   const rows = list.state === 'ready' ? list.data.bookings : [];
   const params = { ...filters, page: 1 }; Object.keys(params).forEach(key => { if (!params[key]) delete params[key]; });
   return <><header className="booking-heading"><h1 ref={action.heading} tabIndex={-1}>{admin ? 'Bookings management' : 'My bookings'}</h1>
-    <p>{admin ? 'Filter the booking queue. Check-in and attendance actions are planned for a later milestone.' : 'Review your saved bookings and cancel a BOOKED reservation before its start time.'}</p></header>
+    <p>{admin ? 'Filter bookings. Check-in and day-of decisions are available for eligible appointments.' : 'Review your saved bookings and cancel a BOOKED reservation before its start time.'}</p></header>
     <Notice value={action.notice} />{action.busy && <p role="status">An action is still in progress. Filters do not cancel it.</p>}
     <section className="booking-panel"><h2>Find bookings</h2><form className="booking-filters" onSubmit={event => { event.preventDefault(); action.change(params); }}>
       {admin && <label>Donor Account ID<input name="donor" inputMode="numeric" value={filters.donor} onChange={event => setFilters(old => ({ ...old, donor: event.target.value }))} /></label>}
@@ -256,6 +258,52 @@ function BookingList({ auth, admin }) {
         <p>Slot {row.slotId}: {timestamp(row.startsAt)} to {timestamp(row.endsAt)}</p>
         <p>Status: {row.bookingStatus}. Changed: {timestamp(row.statusChangedAt)}</p>
         {row.cancellationReason && <p>Cancellation: {row.cancellationReason.replaceAll('_', ' ')}</p>}
+        {row.latestDecision && <p>Latest staff decision: {row.latestDecision.replaceAll('_', ' ')}{row.latestDeferredUntil ? ` through ${row.latestDeferredUntil} (IST)` : ''}.</p>}
+        {admin && row.bookingStatus === 'BOOKED' && row.donorAccountStatus === 'ACTIVE'
+          && row.slotStatus !== 'CANCELLED' && Date.now() >= new Date(row.startsAt).getTime()
+          && Date.now() < new Date(row.endsAt).getTime() && <button type="button" disabled={action.busy}
+            onClick={event => action.select(event, { label: 'Check in', captured: copy(row),
+              description: `Check in ${row.donorName} (Account ${row.donorAccountId}) for booking ${row.bookingId}, ${timestamp(row.startsAt)}. This changes BOOKED to CHECKED_IN and does not create a donation.`,
+              request: { method: 'PATCH', path: `/admin/bookings/${row.bookingId}/status`,
+                body: { bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' },
+                expected: result => result.booking?.bookingId === row.bookingId && result.booking?.donorAccountId === row.donorAccountId
+                  && result.booking?.bookingStatus === 'CHECKED_IN' },
+              matches: () => list.scope.current === list.key && list.data?.bookings.some(current => current.bookingId === row.bookingId
+                && current.bookingStatus === 'BOOKED' && current.donorAccountId === row.donorAccountId) })}>Check in</button>}
+        {admin && row.bookingStatus === 'CHECKED_IN' && row.donorAccountStatus === 'ACTIVE' && !row.hasDonation
+          && new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(row.startsAt)) === todayIst()
+          && <form className="booking-actions" onSubmit={event => {
+            event.preventDefault();
+            const draft = decisionDrafts[row.bookingId] ?? { decision: 'ACCEPTED', deferredUntil: todayIst() };
+            const body = { bookingId: row.bookingId, decision: draft.decision,
+              ...(draft.decision === 'TEMPORARILY_DEFERRED' ? { deferredUntil: draft.deferredUntil } : {}) };
+            if (body.decision === 'TEMPORARILY_DEFERRED' && (!body.deferredUntil || body.deferredUntil < todayIst())) return;
+            const reason = { ACCEPTED: 'STAFF_ACCEPTED', TEMPORARILY_DEFERRED: 'STAFF_TEMPORARY_DEFERRAL', REVIEW_REQUIRED: 'STAFF_REVIEW_REQUIRED' }[draft.decision];
+            const deferredUntil = body.deferredUntil ?? null;
+            action.select(event, { label: 'Record eligibility decision', captured: copy(row),
+              description: `Record ${draft.decision.replaceAll('_', ' ')} for ${row.donorName} (Account ${row.donorAccountId}), booking ${row.bookingId}, appointment ${timestamp(row.startsAt)}.${deferredUntil ? ` The deferral is through ${deferredUntil}, inclusive in India Standard Time.` : ''} This appends a decision to this visit's history.`,
+              request: { method: 'POST', path: `/admin/donors/${row.donorAccountId}/eligibility-decisions`, body,
+                expected: result => result.eligibilityDecision?.bookingId === row.bookingId
+                  && result.eligibilityDecision?.donorAccountId === row.donorAccountId
+                  && result.eligibilityDecision?.decision === draft.decision && result.eligibilityDecision?.reasonCode === reason
+                  && result.eligibilityDecision?.deferredUntil === deferredUntil
+                  && positiveId(result.eligibilityDecision?.eligibilityDecisionId) },
+              matches: () => list.scope.current === list.key && list.data?.bookings.some(current => current.bookingId === row.bookingId
+                && current.bookingStatus === 'CHECKED_IN' && current.donorAccountId === row.donorAccountId && !current.hasDonation) });
+          }}>
+            <label>Day-of eligibility decision for booking {row.bookingId}<select name={`decision-${row.bookingId}`} aria-label={`Day-of eligibility decision for booking ${row.bookingId}`}
+              value={(decisionDrafts[row.bookingId] ?? { decision: 'ACCEPTED' }).decision}
+              onChange={event => { action.invalidate(); setDecisionDrafts(old => ({ ...old, [row.bookingId]: { ...old[row.bookingId], decision: event.target.value,
+                ...(event.target.value === 'TEMPORARILY_DEFERRED' ? { deferredUntil: old[row.bookingId]?.deferredUntil ?? todayIst() } : {}) } })); }}>
+              <option value="ACCEPTED">Accept</option><option value="TEMPORARILY_DEFERRED">Temporarily defer</option><option value="REVIEW_REQUIRED">Review required</option>
+            </select></label>
+            {(decisionDrafts[row.bookingId]?.decision ?? 'ACCEPTED') === 'TEMPORARILY_DEFERRED' && <label>Deferred until (IST)
+              <input name={`deferredUntil-${row.bookingId}`} type="date" min={todayIst()} required aria-label={`Deferred until for booking ${row.bookingId}`}
+                value={decisionDrafts[row.bookingId]?.deferredUntil ?? todayIst()}
+                onChange={event => { action.invalidate(); setDecisionDrafts(old => ({ ...old, [row.bookingId]: { ...old[row.bookingId], deferredUntil: event.target.value } })); }} />
+            </label>}
+            <button type="submit" disabled={action.busy}>Review decision</button>
+          </form>}
         {!admin && row.bookingStatus === 'BOOKED' && new Date(row.startsAt).getTime() > Date.now() && <button type="button" disabled={action.busy}
           onClick={event => action.select(event, { label: 'Cancel booking', captured: row,
             description: `Cancel your BOOKED reservation ${row.bookingId} for slot ${row.slotId} on ${timestamp(row.startsAt)}? The same slot cannot be rebooked.`,

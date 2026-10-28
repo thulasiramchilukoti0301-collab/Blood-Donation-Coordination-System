@@ -3,16 +3,24 @@ import { HttpError } from '../../utils/httpError.js';
 import { safeAccountError } from '../accounts/transaction.js';
 import { requireStoredSession } from '../accounts/sessionAuthorization.js';
 import { createAuditWriter } from '../audit/writer.js';
-import { bookingQuery, eligibility, fields, id, overlaps, slotCreate, slotPatch, slotQuery, storedTime, todayIst } from './rules.js';
+import { bookingQuery, eligibility, eligibilityDecisionInput, fields, id, overlaps, slotCreate, slotPatch, slotQuery, storedTime, todayIst } from './rules.js';
 
 const auditCodes = ['DONATION_SLOT_CREATED', 'DONATION_SLOT_UPDATED', 'DONATION_SLOT_CLOSED',
-  'DONATION_SLOT_CANCELLED', 'BOOKING_CREATED', 'BOOKING_CANCELLED_BY_DONOR', 'BOOKING_CANCELLED_BY_STAFF'];
+  'DONATION_SLOT_CANCELLED', 'BOOKING_CREATED', 'BOOKING_CANCELLED_BY_DONOR', 'BOOKING_CANCELLED_BY_STAFF',
+  'BOOKING_CHECKED_IN', 'ELIGIBILITY_DECISION_RECORDED'];
 const conflict = (code, message) => new HttpError(409, code, message);
 const slotConflict = () => conflict('SLOT_CONFLICT', 'The slot changed or is no longer available. Refresh the list.');
 const bookingConflict = () => conflict('BOOKING_CONFLICT', 'This booking cannot be created or cancelled. Refresh the list.');
 const active = (account, role) => {
   if (!account || account.accountStatus !== 'ACTIVE') throw new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'Sign in with an active account.');
   if (account.role !== role) throw new HttpError(403, 'FORBIDDEN', 'You do not have access to this resource.');
+};
+// A target's state is domain data, not the caller's authentication state.
+// Hide absent/wrong-role targets as not found and report inactive Donors as a
+// target conflict without invalidating the already-authenticated Admin.
+const activeDonorTarget = account => {
+  if (!account || account.role !== 'DONOR') throw new HttpError(404, 'DONOR_NOT_FOUND', 'The Donor was not found.');
+  if (account.accountStatus !== 'ACTIVE') throw conflict('DONOR_UNAVAILABLE', 'This Donor is not active for this action.');
 };
 const future = (slot, now) => storedTime(slot.startsAt).utc > now;
 
@@ -21,7 +29,7 @@ export function createBookingService({ repository, auditWriter = createAuditWrit
   if (!repository) throw new TypeError('A booking repository is required.');
   const audit = (connection, actor, actionCode, subjectType, subjectId, reasonCode, changeSummary) => auditWriter.write(connection,
     { actorAccountId: actor, actionCode, subjectType, subjectId, reasonCode, changeSummary, operationId: operationId() });
-  async function transaction(actorId, role, authorization, work) {
+  async function transaction(actorId, role, authorization, work, targetAccountIds = []) {
     const actor = id(actorId);
     return repository.transaction(actor, async (connection, accounts) => {
       const account = accounts.get(actor);
@@ -30,8 +38,13 @@ export function createBookingService({ repository, auditWriter = createAuditWrit
       // The Account and SID stay locked while domain rows are acquired. Re-read
       // that already-held SID immediately before writes so time spent waiting
       // for domain locks cannot authorize a now-expired session.
-      return work(connection, actor, () => requireStoredSession(connection, authorization, account));
-    });
+      return work(connection, actor, () => requireStoredSession(connection, authorization, account), accounts);
+    }, targetAccountIds);
+  }
+  async function bookingHint(bookingId) {
+    const hint = await repository.bookingOwnerHint(bookingId);
+    if (!hint) throw new HttpError(404, 'BOOKING_NOT_FOUND', 'The booking was not found.');
+    return hint;
   }
   async function ownHistory(donorId) {
     if (!await repository.donorExists(donorId)) throw new HttpError(503, 'DONOR_PROFILE_UNAVAILABLE', 'The donor profile is unavailable.');
@@ -164,6 +177,80 @@ export function createBookingService({ repository, auditWriter = createAuditWrit
           'DONOR_REQUESTED', 'Donor cancelled booking');
         return { bookingId, bookingStatus: 'CANCELLED_BY_DONOR', cancelledAt: new Date(clock()).toISOString() };
       });
+    },
+    async checkIn(actorId, bookingIdValue, body, authorization) {
+      const bookingId = id(bookingIdValue);
+      fields(body, ['bookingStatus', 'reason'], ['bookingStatus', 'reason']);
+      if (body.bookingStatus !== 'CHECKED_IN' || body.reason !== 'STAFF_CHECKED_IN') {
+        throw new HttpError(400, 'VALIDATION_ERROR', 'Only the supported check-in action is accepted.');
+      }
+      try {
+        const hint = await bookingHint(bookingId);
+        return await transaction(actorId, 'ADMIN', authorization, async (connection, actor, authorizeMutation, accounts) => {
+          activeDonorTarget(accounts.get(hint.donorAccountId));
+          if (!await repository.donorExists(hint.donorAccountId, connection)) throw new HttpError(404, 'BOOKING_NOT_FOUND', 'The booking was not found.');
+          const slot = await repository.lockSlot(connection, hint.slotId);
+          const row = await repository.lockAdminBooking(connection, bookingId);
+          if (!slot || !row || row.donorAccountId !== hint.donorAccountId || row.slotId !== hint.slotId) throw bookingConflict();
+          if (row.bookingStatus !== 'BOOKED' || slot.slotStatus === 'CANCELLED') throw bookingConflict();
+          await authorizeMutation();
+          const now = clock();
+          if (!(storedTime(slot.startsAt).utc <= now && now < storedTime(slot.endsAt).utc)) throw bookingConflict();
+          if (await repository.updateBooking(connection, bookingId, 'CHECKED_IN', null) !== 1) throw bookingConflict();
+          await audit(connection, actor, 'BOOKING_CHECKED_IN', 'Booking', bookingId,
+            'STAFF_CHECKED_IN', 'Donor checked in for appointment');
+          return { bookingId, donorAccountId: row.donorAccountId, slotId: row.slotId,
+            bookingStatus: 'CHECKED_IN', statusChangedAt: new Date(now).toISOString() };
+        }, [hint.donorAccountId]);
+      } catch (error) { throw safeAccountError(error); }
+    },
+    async recordEligibilityDecision(actorId, donorIdValue, body, authorization) {
+      const donorId = id(donorIdValue);
+      const input = eligibilityDecisionInput(body);
+      try {
+        const hint = await bookingHint(input.bookingId);
+        if (hint.donorAccountId !== donorId) throw new HttpError(404, 'BOOKING_NOT_FOUND', 'The booking was not found.');
+        return await transaction(actorId, 'ADMIN', authorization, async (connection, actor, authorizeMutation, accounts) => {
+          activeDonorTarget(accounts.get(donorId));
+          if (!await repository.donorExists(donorId, connection)) throw new HttpError(404, 'DONOR_NOT_FOUND', 'The donor was not found.');
+          const slot = await repository.lockSlot(connection, hint.slotId);
+          const row = await repository.lockAdminBooking(connection, input.bookingId);
+          if (!slot || !row || row.donorAccountId !== donorId || row.slotId !== hint.slotId
+            || row.bookingStatus !== 'CHECKED_IN') {
+            throw conflict('ELIGIBILITY_DECISION_CONFLICT', 'This checked-in booking changed. Refresh the list.');
+          }
+          if (await repository.bookingHasDonation(connection, input.bookingId)) {
+            throw conflict('ELIGIBILITY_DECISION_CONFLICT', 'A donation outcome already exists for this visit.');
+          }
+          const latest = await repository.latestBookingDecision(connection, input.bookingId);
+          if (latest?.decision === input.decision && (latest.deferredUntil ?? null) === input.deferredUntil) {
+            throw conflict('ELIGIBILITY_DECISION_CONFLICT', 'This decision is already the latest decision for this visit.');
+          }
+          const history = await repository.history(donorId, connection);
+          await authorizeMutation();
+          const now = clock();
+          const today = todayIst(now);
+          if (storedTime(slot.startsAt).date !== today) {
+            throw conflict('ELIGIBILITY_DECISION_CONFLICT', 'Day-of decisions are available only on the appointment date.');
+          }
+          if (input.decision === 'TEMPORARILY_DEFERRED' && input.deferredUntil < today) {
+            throw new HttpError(400, 'VALIDATION_ERROR', 'The deferral date must be today or later in India Standard Time.');
+          }
+          if (input.decision === 'ACCEPTED'
+            && eligibility({ lastCollectedDate: history.lastCollectedDate, decision: null }, today).result !== 'ELIGIBLE') {
+            throw conflict('DONOR_NOT_ELIGIBLE', 'The 56-day collection interval has not elapsed.');
+          }
+          const reasons = { ACCEPTED: 'STAFF_ACCEPTED', TEMPORARILY_DEFERRED: 'STAFF_TEMPORARY_DEFERRAL',
+            REVIEW_REQUIRED: 'STAFF_REVIEW_REQUIRED' };
+          const reasonCode = reasons[input.decision];
+          const decisionId = await repository.insertEligibilityDecision(connection, donorId, input.bookingId,
+            actor, input.decision, reasonCode, input.deferredUntil);
+          await audit(connection, actor, 'ELIGIBILITY_DECISION_RECORDED', 'EligibilityDecision', decisionId,
+            reasonCode, 'Day-of eligibility decision recorded');
+          return { eligibilityDecisionId: decisionId, bookingId: input.bookingId, donorAccountId: donorId,
+            decision: input.decision, reasonCode, deferredUntil: input.deferredUntil, decidedAt: new Date(now).toISOString() };
+        }, [donorId]);
+      } catch (error) { throw safeAccountError(error); }
     },
   };
 }
