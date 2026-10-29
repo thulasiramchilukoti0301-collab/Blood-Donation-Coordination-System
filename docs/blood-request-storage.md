@@ -1,5 +1,7 @@
 # Feature 7 — Blood Request database milestone
 
+**Superseding activation update, 2026-10-27:** the tested history table/trigger has been promoted to `database/migrations/012_request_status_history.sql`, preserving its table/index/FK definitions and strengthening human actor/reason validation by disabling the old UUID-only system bypass. The numbered migration is disposable-verified; it has not been applied to development. The original proposal is historical, not an installation script. See [the activation runbook](feature7-activation.md) for current API, migration, audit and verification status. Earlier milestone evidence below remains revision-specific.
+
 Authored and verified on 2026-10-25 on `lathikaa`, starting from clean committed AuditEvent checkpoint `5b7f45acf38bba3e583b245939b2959c88efcf12` (the cached origin/lathikaa ref matched). No development database or private environment file was accessed. No backend route or frontend was implemented. Existing Hospital/Donor/authentication/AuditEvent code and migration 010 are preserved.
 
 ## Delivered objects and coordination boundary
@@ -81,7 +83,7 @@ Creation transaction: lock/recheck current Account and Hospital; validate recipi
 
 For updates, use a consistent reviewed lock order, recheck current status/ownership, set trusted context, make one status UPDATE, let the trigger insert history, write general audit on the same connection, and commit. Agree/test the shared Account/request/allocation lock strategy; trigger row locks do not establish concurrency correctness by themselves. No shared authentication or Account approval workflow is duplicated.
 
-Allocated/issued/outstanding totals come from real Allocation rows. `009_compatibility_allocation.sql` remains empty, so full list/detail fulfillment responses and cancellation release/issue predicates cannot be implemented by fabricating zero counts. `cancelledAt` in the approved API can be derived from the CANCELLED history event; there is no new HospitalRequest cancellation timestamp column. The tested static transitions do not prove fulfillment or pre-issue cancellation semantics.
+Allocated/issued/outstanding totals come from real Allocation rows. Migration 009 now stores Allocation and the directed compatibility matrix; it has passed a fresh MySQL 8.0.39 disposable check. No application allocation/issue/cancellation writer is mounted yet, so read projections must remain tied to real rows and cancellation/issue predicates remain gated by those operations. `cancelledAt` in the approved API can be derived from the CANCELLED history event; there is no new HospitalRequest cancellation timestamp column. Storage verification does not prove live fulfillment or pre-issue cancellation semantics. See [Feature 8 implementation](feature8-implementation.md).
 
 ## Verification and safe reproduction
 

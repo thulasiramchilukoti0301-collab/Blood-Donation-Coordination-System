@@ -5,7 +5,7 @@ import { mysqlStatements } from '../../database/tests/helpers/mysql-script.mjs';
 
 // Static contract checks only. Real SQL verification is separately disposable.
 const requestSql = readFileSync(new URL('../../database/migrations/008_blood_requests.sql', import.meta.url), 'utf8');
-const historySql = readFileSync(new URL('../../database/proposals/request-status-history.sql', import.meta.url), 'utf8');
+const historySql = readFileSync(new URL('../../database/migrations/012_request_status_history.sql', import.meta.url), 'utf8');
 const clean = (text) => text.replace(/--[^\r\n]*/gu, '').replace(/\s+/gu, ' ').trim();
 const request = mysqlStatements(requestSql);
 const history = mysqlStatements(historySql);
@@ -52,8 +52,10 @@ test('Storage guards enforce initial status, immutable quantity and terminal/sta
   assert.doesNotMatch(request.join('\n'), /(?:SELECT|INSERT INTO|UPDATE|DELETE FROM) Allocation/iu);
 });
 
-test('Unnumbered history proposal preserves seven approved columns, parent FKs and timeline index', () => {
-  assert.match(historySql, /number\/filename remains UNASSIGNED/u);
+test('012 history migration preserves seven approved columns, parent FKs and timeline index', () => {
+  assert.match(historySql, /Approved Feature 7 history migration/u);
+  const proposal = mysqlStatements(readFileSync(new URL('../../database/proposals/request-status-history.sql', import.meta.url), 'utf8'));
+  assert.equal(clean(history[0]), clean(proposal[0]), 'Promotion preserves every tested table definition/constraint/index');
   assert.equal(history.length, 2);
   assert.deepEqual(columns(history[0]), ['request_status_history_id', 'request_id', 'old_status', 'new_status',
     'changed_by_account_id', 'reason_code', 'changed_at']);
@@ -65,7 +67,7 @@ test('Unnumbered history proposal preserves seven approved columns, parent FKs a
   assert.doesNotMatch(sql, /\bUNIQUE\b|\bCASCADE\b/u);
 });
 
-test('Only the proposed conditional AFTER UPDATE trigger writes update history; actor/reason cleanup is caller-owned', () => {
+test('Only the conditional AFTER UPDATE trigger writes update history; actor/reason cleanup is caller-owned', () => {
   const sql = clean(history[1]);
   assert.match(sql, /^CREATE TRIGGER trg_request_status_history_update AFTER UPDATE ON HospitalRequest/u);
   assert.match(sql, /IF NOT \(OLD.request_status <=> NEW.request_status\) THEN/u);
@@ -74,6 +76,9 @@ test('Only the proposed conditional AFTER UPDATE trigger writes update history; 
   assert.match(sql, /@request_reason_code/u);
   assert.match(sql, /@request_system_operation_id/u);
   assert.match(sql, /FROM Account WHERE account_id = actor_id FOR UPDATE/u);
+  assert.match(sql, /IF @request_reason_code IS NULL THEN SIGNAL/u);
+  assert.match(sql, /IF @request_actor_account_id IS NULL THEN SIGNAL/u);
+  assert.doesNotMatch(sql, /REGEXP '\^\[0-9A-Fa-f\]/u);
   assert.doesNotMatch(sql, /INSERT INTO AuditEvent|COMMIT|ROLLBACK|CREATE TRIGGER.*AFTER INSERT/iu);
 });
 

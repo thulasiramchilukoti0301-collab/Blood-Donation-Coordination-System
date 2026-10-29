@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createApp } from '../src/app.js';
+import { createAuthRuntime } from '../src/modules/auth/router.js';
 
 test('Hospital profile requires authentication and unrelated Hospital endpoints remain unmounted', async () => {
-  const server = createApp({ verifyDatabase: async () => { throw new Error('No database access is allowed.'); } }).listen(0, '127.0.0.1');
+  const server = createApp({ verifyDatabase: async () => { throw new Error('No database access is allowed.'); },
+    authRuntime: createAuthRuntime({ env: {} }) }).listen(0, '127.0.0.1');
   try {
     await new Promise((resolve) => server.once('listening', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
     for (const [method, path] of [['GET', '/api/hospitals/me'], ['PATCH', '/api/hospitals/me'],
-      ['GET', '/api/admin/hospitals'], ['GET', '/api/admin/hospitals/12']]) {
+      ['GET', '/api/admin/hospitals'], ['GET', '/api/admin/hospitals/12'],
+      ['GET', '/api/blood-groups'], ['GET', '/api/hospitals/me/requests'], ['POST', '/api/hospitals/me/requests'],
+      ['GET', '/api/hospitals/me/requests/90'], ['GET', '/api/admin/requests'], ['GET', '/api/admin/requests/90']]) {
       const response = await fetch(`${base}${path}`, {
         method,
         headers: { 'Content-Type': 'application/json', 'X-Account-Id': '12', 'X-Role': 'HOSPITAL', Cookie: 'bdcs.sid=forged' },
@@ -22,7 +26,6 @@ test('Hospital profile requires authentication and unrelated Hospital endpoints 
     }
     for (const [method, path] of [
       ['POST', '/api/auth/register/admins'], ['PATCH', '/api/admin/hospitals/12'],
-      ['GET', '/api/hospitals/me/requests'], ['POST', '/api/hospitals/me/requests'],
       ['GET', '/api/hospitals/me/reports/requests'],
     ]) {
       const response = await fetch(`${base}${path}`, {

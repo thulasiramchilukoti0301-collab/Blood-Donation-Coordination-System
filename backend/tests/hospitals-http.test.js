@@ -285,7 +285,7 @@ test('logout invalidates the Hospital session for both GET and PATCH', async (t)
   }
 });
 
-test('Admin donor PATCH is forbidden while unrelated Admin/Hospital mutations, requests and reports remain unmounted', async (t) => {
+test('Admin donor PATCH is forbidden while unrelated Admin/Hospital mutations and reports remain unmounted', async (t) => {
   const { request, database, login } = await start(t);
   const session = await login('31');
   await expectError(await request('/donors/me', {
@@ -294,7 +294,6 @@ test('Admin donor PATCH is forbidden while unrelated Admin/Hospital mutations, r
   for (const [method, path] of [
     ['POST', '/auth/register/admins'],
     ['PATCH', '/admin/hospitals/12'],
-    ['GET', '/hospitals/me/requests'], ['POST', '/hospitals/me/requests'],
     ['GET', '/hospitals/me/reports/requests'],
     ['POST', '/hospitals/me'], ['DELETE', '/hospitals/me'],
   ]) {

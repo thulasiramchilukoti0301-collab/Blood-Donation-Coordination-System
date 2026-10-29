@@ -61,6 +61,8 @@ Hospitals cannot allocate units, view unit-level donor provenance, change staff 
 
 - Own requests: request ID, blood group, status, priority, submitted/needed-by date range. Sort by newest, need-by date, or status. No inventory query by unit.
 
+Feature 7's activated public Hospital list currently supports the documented structured filters with one stable newest-first order (`createdAt DESC, requestId DESC`), fixed 20-row pages, and no caller sort parameter. The broader selectable sorting above is future behavior, not an implemented option. ACTIVE Hospital/Admin accounts can use the request BloodGroup lookup; it returns active choices only, with no compatibility matrix. Existing requests remain readable after group deactivation.
+
 ### Donor
 
 - Own bookings: status/date range.

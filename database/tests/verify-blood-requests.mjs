@@ -86,7 +86,7 @@ async function reject(label, code, sql, values = []) {
   throw new NegativeCheckFailure(label, code, 'NO_ERROR');
 }
 const clearContext = () => connection.query('SET @request_actor_account_id = NULL, @request_reason_code = NULL, @request_system_operation_id = NULL');
-const context = (actor, reason = null, system = null) => connection.execute(
+const context = (actor, reason = 'REVIEW_STARTED', system = null) => connection.execute(
   'SET @request_actor_account_id = ?, @request_reason_code = ?, @request_system_operation_id = ?', [actor, reason, system]);
 
 try {
@@ -213,6 +213,17 @@ try {
   const [[missingAuditRequest]] = await connection.execute('SELECT COUNT(*) AS n FROM HospitalRequest WHERE request_id=?', [noAudit]);
   const [[missingAuditHistory]] = await connection.execute('SELECT COUNT(*) AS n FROM RequestStatusHistory WHERE request_id=?', [noAudit]);
   assert.deepEqual([Number(missingAuditRequest.n), Number(missingAuditHistory.n)], [0, 0]);
+  await connection.query('SAVEPOINT status_audit_failure');
+  await context(admin);
+  await connection.execute("UPDATE HospitalRequest SET request_status='UNDER_REVIEW' WHERE request_id=?", [requestId]);
+  await assert.rejects(audit.write(connection, { actorAccountId: '999999', actionCode: 'test.only.request', subjectType: 'HospitalRequest', subjectId: requestId }),
+    (error) => error.status === 503 && error.code === 'DATABASE_UNAVAILABLE');
+  await connection.query('ROLLBACK TO SAVEPOINT status_audit_failure');
+  const [[statusRollback]] = await connection.execute('SELECT request_status AS status FROM HospitalRequest WHERE request_id=?', [requestId]);
+  const [[historyRollback]] = await connection.execute('SELECT COUNT(*) AS n FROM RequestStatusHistory WHERE request_id=?', [requestId]);
+  assert.deepEqual([statusRollback.status, Number(historyRollback.n)], ['SUBMITTED', 1]);
+  negatives.push('status-history-audit-rollback');
+  await clearContext();
   const [[defaults]] = await connection.execute('SELECT priority, request_status, created_at IS NOT NULL AS created, updated_at IS NOT NULL AS updated FROM HospitalRequest WHERE request_id=?', [requestId]);
   assert.deepEqual([defaults.priority, defaults.request_status, Number(defaults.created), Number(defaults.updated)], ['NORMAL', 'SUBMITTED', 1, 1]);
   // Also exercise omitted priority/status/time defaults, not just explicit values.
@@ -246,6 +257,7 @@ try {
   for (const [label, actor, reason, system] of [
     ['ambiguous', admin, null, token], ['invalid-system-operation', null, null, 'invalid'],
     ['system-operation-control-character', null, null, token + '\n'],
+    ['missing-reason', admin, null, null], ['wrong-mapping', admin, 'REQUEST_REJECTED', null],
     ['blank-reason', admin, ' ', null], ['overlength-reason', admin, 'X'.repeat(41), null],
     ['control-character-reason', admin, 'bad\nreason', null],
   ]) {
@@ -257,29 +269,33 @@ try {
   await connection.execute("UPDATE HospitalRequest SET request_status='UNDER_REVIEW',updated_at=CURRENT_TIMESTAMP WHERE request_id=?", [requestId]);
   const countHistory = async (id) => { const [[row]] = await connection.execute('SELECT COUNT(*) AS n FROM RequestStatusHistory WHERE request_id=?', [id]); return Number(row.n); };
   assert.equal(await countHistory(requestId), 2);
+  await clearContext();
   await connection.execute("UPDATE HospitalRequest SET priority='URGENT' WHERE request_id=?", [requestId]);
+  await connection.execute('UPDATE HospitalRequest SET request_status=request_status WHERE request_id=?', [requestId]);
   assert.equal(await countHistory(requestId), 2, 'Non-status updates must not duplicate history.');
   for (const status of ['AWAITING_INVENTORY', 'PARTIALLY_FULFILLED', 'AWAITING_INVENTORY', 'PARTIALLY_FULFILLED', 'FULFILLED']) {
+    await context(admin, { AWAITING_INVENTORY: 'INVENTORY_UNAVAILABLE', PARTIALLY_FULFILLED: 'ALLOCATION_UPDATED', FULFILLED: 'REQUEST_FULFILLED' }[status]);
     await connection.execute('UPDATE HospitalRequest SET request_status=? WHERE request_id=?', [status, requestId]);
   }
   assert.equal(await countHistory(requestId), 7);
   await reject('fulfilled-terminal', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='UNDER_REVIEW' WHERE request_id=?", [requestId]);
   const rejected = await create(); await initial(rejected);
+  await context(admin);
   await connection.execute("UPDATE HospitalRequest SET request_status='UNDER_REVIEW' WHERE request_id=?", [rejected]);
   await reject('rejection-requires-reason', 'ER_CHECK_CONSTRAINT_VIOLATED', "UPDATE HospitalRequest SET request_status='REJECTED' WHERE request_id=?", [rejected]);
   await context(admin, 'TEST_ONLY_OTHER');
   await reject('rejection-context-mismatch', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='REJECTED',rejection_reason_code='TEST_ONLY_REJECT' WHERE request_id=?", [rejected]);
-  await context(admin, 'TEST_ONLY_REJECT');
-  await connection.execute("UPDATE HospitalRequest SET request_status='REJECTED',rejection_reason_code='TEST_ONLY_REJECT' WHERE request_id=?", [rejected]);
+  await context(admin, 'REQUEST_REJECTED');
+  await connection.execute("UPDATE HospitalRequest SET request_status='REJECTED',rejection_reason_code='REQUEST_REJECTED' WHERE request_id=?", [rejected]);
   const [[reason]] = await connection.execute("SELECT reason_code FROM RequestStatusHistory WHERE request_id=? AND new_status='REJECTED'", [rejected]);
-  assert.equal(reason.reason_code, 'TEST_ONLY_REJECT');
+  assert.equal(reason.reason_code, 'REQUEST_REJECTED');
   await reject('rejected-terminal', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='UNDER_REVIEW' WHERE request_id=?", [rejected]);
   const cancelled = await create(); await initial(cancelled);
   await context(otherHospital);
   await reject('foreign-hospital-cancel', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='CANCELLED' WHERE request_id=?", [cancelled]);
   await context(admin);
   await reject('unapproved-admin-cancel', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='CANCELLED' WHERE request_id=?", [cancelled]);
-  await context(hospital, 'TEST_ONLY_CANCEL');
+  await context(hospital, 'HOSPITAL_CANCELLED');
   await connection.execute("UPDATE HospitalRequest SET request_status='CANCELLED' WHERE request_id=?", [cancelled]);
   await reject('cancelled-terminal', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='UNDER_REVIEW' WHERE request_id=?", [cancelled]);
   // Storage FKs alone do not authorize creation. This raw SQL-only fixture
@@ -290,9 +306,7 @@ try {
   const systemRequest = await create(); await initial(systemRequest);
   await context(admin); await connection.execute("UPDATE HospitalRequest SET request_status='UNDER_REVIEW' WHERE request_id=?", [systemRequest]);
   await context(null, 'TEST_ONLY_SYSTEM', token);
-  await connection.execute("UPDATE HospitalRequest SET request_status='AWAITING_INVENTORY' WHERE request_id=?", [systemRequest]);
-  const [[systemHistory]] = await connection.execute("SELECT changed_by_account_id,reason_code FROM RequestStatusHistory WHERE request_id=? AND new_status='AWAITING_INVENTORY'", [systemRequest]);
-  assert.equal(systemHistory.changed_by_account_id, null); assert.equal(systemHistory.reason_code, 'TEST_ONLY_SYSTEM');
+  await reject('uuid-is-not-an-actor', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='AWAITING_INVENTORY' WHERE request_id=?", [systemRequest]);
   await clearContext();
   const noContext = await create(); await initial(noContext);
   await reject('cleared-context-not-reused', 'ER_SIGNAL_EXCEPTION', "UPDATE HospitalRequest SET request_status='UNDER_REVIEW' WHERE request_id=?", [noContext]);
@@ -340,6 +354,6 @@ if (failure || cleanupFailure || !rolledBack || !closed) {
   process.exitCode = 1;
 } else {
   for (const label of negatives) console.log('PASS ' + label);
-  console.log(`Request storage + UNASSIGNED history proposal passed: ${negatives.length} negative checks; ${requestCount} requests and ${historyCount} history fixtures rolled back; Account/Hospital/request/history/audit tables empty; context cleared; connection closed.`);
+  console.log(`Request storage + migration 012 passed: ${negatives.length} negative checks; ${requestCount} requests and ${historyCount} history fixtures rolled back; Account/Hospital/request/history/audit tables empty; context cleared; connection closed.`);
   console.log('This does not verify real Allocation-derived counts, pre-issue cancellation, web sessions, production history deployment or concurrency.');
 }

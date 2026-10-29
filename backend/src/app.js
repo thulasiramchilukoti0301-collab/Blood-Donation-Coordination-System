@@ -7,11 +7,15 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { HttpError } from './utils/httpError.js';
 import { createAuthRuntime } from './modules/auth/router.js';
 import { createHospitalRouter } from './modules/hospitals/router.js';
+import { createOperationalBloodRequestRouter } from './modules/blood-requests/runtime.js';
+import { createOperationalAllocationReadRouter } from './modules/allocations/readRuntime.js';
 
 export function createApp({
   verifyDatabase = verifyDatabaseConnection,
   authRuntime = createAuthRuntime(),
   hospitalRouter = createHospitalRouter(),
+  bloodRequestRouter = createOperationalBloodRequestRouter(),
+  allocationReadRouter = createOperationalAllocationReadRouter(),
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -30,6 +34,8 @@ export function createApp({
   if (authRuntime.middleware) app.use('/api', authRuntime.middleware);
   app.use('/api', authRuntime.router);
   app.use('/api', hospitalRouter);
+  app.use('/api', bloodRequestRouter);
+  app.use('/api', allocationReadRouter);
   app.use((req, res, next) => next(new HttpError(404, 'NOT_FOUND', 'API route not found.')));
   app.use(errorHandler);
   return app;

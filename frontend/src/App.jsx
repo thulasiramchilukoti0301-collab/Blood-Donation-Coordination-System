@@ -11,6 +11,12 @@ import AccountStatusPage from './features/auth/AccountStatusPage';
 import HospitalProfilePage from './features/hospitals/HospitalProfilePage';
 import AdminHospitalManagement from './features/hospitals/AdminHospitalManagement';
 import AccountApprovalPage from './features/accounts/AccountApprovalPage';
+import CreateRequestPage from './features/blood-requests/CreateRequestPage';
+import MyRequestsPage from './features/blood-requests/MyRequestsPage';
+import RequestDetailPage from './features/blood-requests/RequestDetailPage';
+import AdminRequestsPage from './features/blood-requests/AdminRequestsPage';
+import AllocationWorkspacePage from './features/allocations/AllocationWorkspacePage';
+import CompatibilityManagementPage from './features/allocations/CompatibilityManagementPage';
 
 const checking = { state: 'checking', message: 'Waiting for a health-check response…' };
 
@@ -77,6 +83,12 @@ export default function App() {
     <Route path="/login" element={<LoginPage />} />
     <Route path="/donor/profile" element={<DonorProfilePage />} />
     <Route path="/hospital/profile" element={<HospitalProfilePage />} />
+    <Route path="/hospital/requests/new" element={<CreateRequestPage />} />
+    <Route path="/hospital/requests" element={<MyRequestsPage />} />
+    <Route path="/hospital/requests/:requestId" element={<RequestDetailPage />} />
+    <Route path="/admin/requests" element={<AdminRequestsPage />} />
+    <Route path="/admin/allocations" element={<AllocationWorkspacePage />} />
+    <Route path="/admin/compatibility" element={<CompatibilityManagementPage />} />
     <Route path="/admin/hospitals" element={<AdminHospitalManagement />} />
     <Route path="/admin/accounts" element={<AccountApprovalPage />} />
     <Route path="/account/status" element={<AccountStatusPage />} />

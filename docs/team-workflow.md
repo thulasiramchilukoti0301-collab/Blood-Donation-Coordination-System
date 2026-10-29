@@ -1,5 +1,7 @@
 # Team Workflow
 
+Feature 7 update (2026-10-27): Lathikaa's approved history migration is reserved as **012_request_status_history.sql**; no current checkout/untracked file/history or live `origin/thulasiram` commit occupied 012. 008/009/010/011 retain their owners; 010 remains AuditEvent-only. Order by dependencies: 002/008 before 012, 010 before request creation, and history-dependent 011 objects after 012. The request subset is mounted and disposable-verified; each developer still performs their own manual schema installation. See [Feature 7 activation](feature7-activation.md). Older statements about the history number remaining UNASSIGNED describe prior milestones, superseded by this explicit reservation.
+
 ## Branches and ownership
 
 - Thulasi works on the continuing personal development branch `thulasiram`.

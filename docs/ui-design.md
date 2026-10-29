@@ -1,6 +1,23 @@
 # UI Design Themes
 
-This document records three available visual themes for the Blood Donation Coordination System. Rose Quartz Focus remains selected for shared Login/Donor registration, access/error, Donor Profile read/edit, and account-status surfaces. **Mint Gauge** is selected for Hospital Registration/Profile, Screen 24 Admin Hospital Management, and the shared Account management supporting flow at `/admin/accounts`; scoped Mint styles do not change shared or Donor appearances or assign a theme to the rest of Donor Management. **Sky Pipeline** is assigned to future Feature 7 Screens 12, 13, 14, and 25 (Create Blood Request, My Blood Requests, Blood Request Details, and Admin Blood Request Management). Feature 7's database milestone does not implement React/CSS. Theme assignments for other unimplemented screens remain open for later user choice; recommendations are not assignments.
+This document records the selected visual themes for the Blood Donation Coordination System. Rose Quartz Focus remains selected for shared Login/Donor registration, access/error, Donor Profile read/edit, and account-status surfaces. **Mint Gauge** is selected for Hospital Registration/Profile, Screen 24 Admin Hospital Management, and the shared Account management supporting flow at `/admin/accounts`; scoped Mint styles do not change shared or Donor appearances or assign a theme to the rest of Donor Management. **Sky Pipeline** is assigned to Feature 7 Screens 12, 13, 14, and 25 (Create Blood Request, My Blood Requests, Blood Request Details, and Admin Blood Request Management). **Indigo Inventory** is selected for Feature 8 Screens 26 and 27 at `/admin/allocations` and `/admin/compatibility`. Theme assignments for other unimplemented screens remain open for later user choice.
+
+## Indigo Inventory
+
+| Token / property | Value |
+|---|---|
+| Background | `#F5F6FF` |
+| White surfaces | `#FFFFFF` |
+| Primary accent | `#5856D6` |
+| Main text / navy | `#25254B` |
+| Lavender surface | `#E9E8FF` |
+| Borders | `#DCDEF2` |
+| Success | `#259C79` |
+| Warning | `#E7A33E` |
+| Error | `#D95765` |
+| Muted | `#73758F` (contrast-safe body copy may use a darker variant) |
+| Fonts | Manrope headings; DM Sans body/UI |
+| Interaction | Responsive data tables/cards, visible keyboard focus, read-only notices and reduced-motion support |
 
 ## Mint Gauge
 
