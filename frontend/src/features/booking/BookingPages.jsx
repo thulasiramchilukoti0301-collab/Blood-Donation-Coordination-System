@@ -242,7 +242,7 @@ function BookingList({ auth, admin }) {
   const rows = list.state === 'ready' ? list.data.bookings : [];
   const params = { ...filters, page: 1 }; Object.keys(params).forEach(key => { if (!params[key]) delete params[key]; });
   return <><header className="booking-heading"><h1 ref={action.heading} tabIndex={-1}>{admin ? 'Bookings management' : 'My bookings'}</h1>
-    <p>{admin ? 'Filter bookings. Check-in and day-of decisions are available for eligible appointments.' : 'Review your saved bookings and cancel a BOOKED reservation before its start time.'}</p></header>
+    <p>{admin ? 'Filter bookings. Check-in, day-of decisions, individual cancellation before start, and no-show after the appointment are available for eligible bookings.' : 'Review your saved bookings and cancel a BOOKED reservation before its start time.'}</p></header>
     <Notice value={action.notice} />{action.busy && <p role="status">An action is still in progress. Filters do not cancel it.</p>}
     <section className="booking-panel"><h2>Find bookings</h2><form className="booking-filters" onSubmit={event => { event.preventDefault(); action.change(params); }}>
       {admin && <label>Donor Account ID<input name="donor" inputMode="numeric" value={filters.donor} onChange={event => setFilters(old => ({ ...old, donor: event.target.value }))} /></label>}
@@ -270,6 +270,28 @@ function BookingList({ auth, admin }) {
                   && result.booking?.bookingStatus === 'CHECKED_IN' },
               matches: () => list.scope.current === list.key && list.data?.bookings.some(current => current.bookingId === row.bookingId
                 && current.bookingStatus === 'BOOKED' && current.donorAccountId === row.donorAccountId) })}>Check in</button>}
+        {admin && row.bookingStatus === 'BOOKED' && row.donorAccountStatus === 'ACTIVE'
+          && row.slotStatus !== 'CANCELLED' && !row.hasDonation && Date.now() < new Date(row.startsAt).getTime()
+          && <button type="button" disabled={action.busy} onClick={event => action.select(event, { label: 'Cancel individual booking', captured: copy(row),
+            description: `Cancel booking ${row.bookingId} for ${row.donorName} (Account ${row.donorAccountId}), scheduled ${timestamp(row.startsAt)}. This changes BOOKED to CANCELLED_BY_STAFF before the appointment starts.`,
+            request: { method: 'PATCH', path: `/admin/bookings/${row.bookingId}/status`,
+              body: { bookingStatus: 'CANCELLED_BY_STAFF', reason: 'STAFF_CANCELLED' },
+              expected: result => result.booking?.bookingId === row.bookingId && result.booking?.donorAccountId === row.donorAccountId
+                && result.booking?.bookingStatus === 'CANCELLED_BY_STAFF' && result.booking?.cancellationReason === 'STAFF_CANCELLED'
+                && Number.isFinite(Date.parse(result.booking?.statusChangedAt)) },
+            matches: () => list.scope.current === list.key && list.data?.bookings.some(current => current.bookingId === row.bookingId
+              && current.bookingStatus === 'BOOKED' && current.donorAccountId === row.donorAccountId && !current.hasDonation) })}>Cancel booking</button>}
+        {admin && row.bookingStatus === 'BOOKED' && row.donorAccountStatus === 'ACTIVE'
+          && row.slotStatus !== 'CANCELLED' && !row.hasDonation && Date.now() >= new Date(row.endsAt).getTime()
+          && <button type="button" disabled={action.busy} onClick={event => action.select(event, { label: 'Mark no-show', captured: copy(row),
+            description: `Mark booking ${row.bookingId} for ${row.donorName} (Account ${row.donorAccountId}) as NO_SHOW. Its appointment ended at ${timestamp(row.endsAt)}.`,
+            request: { method: 'PATCH', path: `/admin/bookings/${row.bookingId}/status`,
+              body: { bookingStatus: 'NO_SHOW', reason: 'STAFF_NO_SHOW' },
+              expected: result => result.booking?.bookingId === row.bookingId && result.booking?.donorAccountId === row.donorAccountId
+                && result.booking?.bookingStatus === 'NO_SHOW' && result.booking?.cancellationReason == null
+                && Number.isFinite(Date.parse(result.booking?.statusChangedAt)) },
+            matches: () => list.scope.current === list.key && list.data?.bookings.some(current => current.bookingId === row.bookingId
+              && current.bookingStatus === 'BOOKED' && current.donorAccountId === row.donorAccountId && !current.hasDonation) })}>Mark no-show</button>}
         {admin && row.bookingStatus === 'CHECKED_IN' && row.donorAccountStatus === 'ACTIVE' && !row.hasDonation
           && new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(row.startsAt)) === todayIst()
           && <form className="booking-actions" onSubmit={event => {

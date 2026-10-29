@@ -49,7 +49,7 @@ function fixture({ capacity = 1, history = { lastCollectedDate: null, decision: 
     },
     async insertSlot() { return '41'; },
     async updateSlot(_, __, patch) { slot.slotStatus = patch.status ?? slot.slotStatus; slot.capacity = patch.capacity ?? slot.capacity; writes.push('slot'); return 1; },
-    async updateBooking(_, id, status) { const row = records.find(item => item.bookingId === id); if (!row || row.bookingStatus !== 'BOOKED') return 0; row.bookingStatus = status; writes.push('cancel'); return 1; },
+    async updateBooking(_, id, status, reason) { const row = records.find(item => item.bookingId === id); if (!row || row.bookingStatus !== 'BOOKED') return 0; row.bookingStatus = status; row.cancellationReason = reason; writes.push('cancel'); return 1; },
     async bookingSlotId(_, id, donor) { return records.find(row => row.bookingId === id && row.donorAccountId === donor)?.slotId ?? null; },
     async lockBooking(_, id, donor) { return records.find(row => row.bookingId === id && row.donorAccountId === donor) ?? null; },
     async bookingOwnerHint(id) { const row = records.find(value => value.bookingId === id); return row && { donorAccountId: row.donorAccountId, slotId: row.slotId }; },
@@ -170,6 +170,61 @@ test('staff check-in uses active donor, current appointment interval and fixed a
   assert.deepEqual(wrongTargetRole.writes, []);
 });
 
+test('individual staff cancellation and no-show use narrow BOOKED-only time windows and fixed audit mappings', async () => {
+  const appointment = { startsAt: '2026-10-27T10:00:00+05:30', endsAt: '2026-10-27T11:00:00+05:30' };
+  const run = (bookingStatus, reason, currentTime) => {
+    const f = fixture({ slotOverride: appointment, currentTime, bookings: [
+      { bookingId: '1', donorAccountId: '10', slotId: '40', bookingStatus: 'BOOKED' }] });
+    return { f, pending: f.service.updateAdminBookingStatus('1', '1', { bookingStatus, reason }, f.authorizations.get('1')) };
+  };
+  const cancelled = run('CANCELLED_BY_STAFF', 'STAFF_CANCELLED', Date.parse('2026-10-27T04:29:59Z'));
+  const cancelResult = await cancelled.pending;
+  assert.equal(cancelResult.bookingStatus, 'CANCELLED_BY_STAFF');
+  assert.equal(cancelled.f.records[0].cancellationReason, 'STAFF_CANCELLED');
+  assert.deepEqual(cancelled.f.events.map(e => [e.actionCode, e.reasonCode]), [['BOOKING_CANCELLED_BY_STAFF', 'STAFF_CANCELLED']]);
+  const noShow = run('NO_SHOW', 'STAFF_NO_SHOW', Date.parse('2026-10-27T05:30:00Z'));
+  const noShowResult = await noShow.pending;
+  assert.equal(noShowResult.bookingStatus, 'NO_SHOW');
+  assert.equal(noShow.f.records[0].cancellationReason, null);
+  assert.deepEqual(noShow.f.events.map(e => [e.actionCode, e.reasonCode]), [['BOOKING_MARKED_NO_SHOW', 'STAFF_NO_SHOW']]);
+
+  for (const [status, reason, time, hasDonation, slotStatus] of [
+    ['CANCELLED_BY_STAFF', 'STAFF_CANCELLED', Date.parse('2026-10-27T04:30:00Z'), false, 'OPEN'],
+    ['CANCELLED_BY_STAFF', 'STAFF_CANCELLED', Date.parse('2026-10-27T04:00:00Z'), false, 'CANCELLED'],
+    ['CANCELLED_BY_STAFF', 'STAFF_CANCELLED', Date.parse('2026-10-27T04:00:00Z'), true, 'OPEN'],
+    ['NO_SHOW', 'STAFF_NO_SHOW', Date.parse('2026-10-27T05:29:59Z'), false, 'OPEN'],
+    ['NO_SHOW', 'STAFF_NO_SHOW', Date.parse('2026-10-27T05:30:00Z'), true, 'OPEN'],
+  ]) {
+    const f = fixture({ slotOverride: { ...appointment, slotStatus }, currentTime: time, hasDonation, bookings: [
+      { bookingId: '1', donorAccountId: '10', slotId: '40', bookingStatus: 'BOOKED' }] });
+    await assert.rejects(f.service.updateAdminBookingStatus('1', '1', { bookingStatus: status, reason }, f.authorizations.get('1')), safe('BOOKING_CONFLICT'));
+    assert.deepEqual(f.writes, []); assert.deepEqual(f.events, []);
+  }
+  for (const status of ['CHECKED_IN', 'COMPLETED', 'CANCELLED_BY_DONOR', 'CANCELLED_BY_STAFF', 'NO_SHOW']) {
+    const f = fixture({ slotOverride: appointment, currentTime: Date.parse('2026-10-27T05:30:00Z'), bookings: [
+      { bookingId: '1', donorAccountId: '10', slotId: '40', bookingStatus: status }] });
+    await assert.rejects(f.service.updateAdminBookingStatus('1', '1', { bookingStatus: 'NO_SHOW', reason: 'STAFF_NO_SHOW' }, f.authorizations.get('1')), safe('BOOKING_CONFLICT'));
+    assert.deepEqual(f.writes, []); assert.deepEqual(f.events, []);
+  }
+  const invalid = fixture({ slotOverride: appointment, bookings: [{ bookingId: '1', donorAccountId: '10', slotId: '40', bookingStatus: 'BOOKED' }] });
+  await assert.rejects(invalid.service.updateAdminBookingStatus('1', '1', { bookingStatus: 'NO_SHOW', reason: 'free text' }, invalid.authorizations.get('1')), safe('VALIDATION_ERROR'));
+  assert.deepEqual(invalid.writes, []); assert.deepEqual(invalid.events, []);
+
+  const suspended = fixture({ donorStatus: 'SUSPENDED', slotOverride: appointment,
+    currentTime: Date.parse('2026-10-27T04:00:00Z'), bookings: [{ bookingId: '1', donorAccountId: '10', slotId: '40', bookingStatus: 'BOOKED' }] });
+  await assert.rejects(suspended.service.updateAdminBookingStatus('1', '1', { bookingStatus: 'CANCELLED_BY_STAFF', reason: 'STAFF_CANCELLED' }, suspended.authorizations.get('1')), safe('DONOR_UNAVAILABLE'));
+  assert.deepEqual(suspended.writes, []); assert.deepEqual(suspended.events, []);
+
+  const competing = fixture({ slotOverride: appointment, currentTime: Date.parse('2026-10-27T04:00:00Z'), bookings: [
+    { bookingId: '1', donorAccountId: '10', slotId: '40', bookingStatus: 'BOOKED' }] });
+  const results = await Promise.allSettled([1, 2].map(() => competing.service.updateAdminBookingStatus('1', '1',
+    { bookingStatus: 'CANCELLED_BY_STAFF', reason: 'STAFF_CANCELLED' }, competing.authorizations.get('1'))));
+  assert.deepEqual(results.map(result => result.status), ['fulfilled', 'rejected']);
+  assert.equal(results[1].reason.code, 'BOOKING_CONFLICT');
+  assert.equal(competing.events.length, 1);
+  assert.equal(competing.records[0].bookingStatus, 'CANCELLED_BY_STAFF');
+});
+
 test('target Donor state rejection is separate from Admin authentication for both staff actions', async () => {
   const today = { startsAt: '2026-10-27T10:00:00+05:30', endsAt: '2026-10-27T11:00:00+05:30' };
   const cases = [
@@ -263,11 +318,13 @@ test('day-of acceptance independently checks the 56-day interval and may superse
   assert.deepEqual(allowed.writes, ['eligibility']);
 });
 
-test('check-in and day-of decision audit failures roll their domain writes back safely', async () => {
+test('staff booking and day-of audit failures roll their domain writes back safely', async () => {
   const appointment = { startsAt: '2026-10-27T10:00:00+05:30', endsAt: '2026-10-27T11:00:00+05:30' };
-  for (const operation of ['check-in', 'decision']) {
+  for (const operation of ['check-in', 'staff-cancel', 'no-show', 'decision']) {
+    const currentTime = operation === 'staff-cancel' ? Date.parse('2026-10-27T04:00:00Z')
+      : operation === 'no-show' ? Date.parse('2026-10-27T05:30:00Z') : Date.parse('2026-10-27T05:00:00Z');
     const f = fixture({ slotOverride: appointment, bookings: [{ bookingId: '1', donorAccountId: '10', slotId: '40',
-      bookingStatus: operation === 'check-in' ? 'BOOKED' : 'CHECKED_IN' }], currentTime: Date.parse('2026-10-27T05:00:00Z') });
+      bookingStatus: operation === 'decision' ? 'CHECKED_IN' : 'BOOKED' }], currentTime });
     const transaction = f.repository.transaction.bind(f.repository);
     f.repository.transaction = (actor, work, targets) => {
       const beforeRecords = structuredClone(f.records); const beforeWrites = f.writes.length; const beforeEvents = f.events.length;
@@ -276,10 +333,16 @@ test('check-in and day-of decision audit failures roll their domain writes back 
         throw error;
       });
     };
-    f.service = createBookingService({ repository: f.repository, clock: () => Date.parse('2026-10-27T05:00:00Z'),
+    f.service = createBookingService({ repository: f.repository, clock: () => currentTime,
       auditWriter: { async write() { throw new Error('Controlled audit failure'); } } });
     if (operation === 'check-in') {
       await assert.rejects(f.service.checkIn('1', '1', { bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }, f.authorizations.get('1')), safe('DATABASE_UNAVAILABLE'));
+      assert.equal(f.records[0].bookingStatus, 'BOOKED');
+    } else if (operation === 'staff-cancel') {
+      await assert.rejects(f.service.updateAdminBookingStatus('1', '1', { bookingStatus: 'CANCELLED_BY_STAFF', reason: 'STAFF_CANCELLED' }, f.authorizations.get('1')), safe('DATABASE_UNAVAILABLE'));
+      assert.equal(f.records[0].bookingStatus, 'BOOKED');
+    } else if (operation === 'no-show') {
+      await assert.rejects(f.service.updateAdminBookingStatus('1', '1', { bookingStatus: 'NO_SHOW', reason: 'STAFF_NO_SHOW' }, f.authorizations.get('1')), safe('DATABASE_UNAVAILABLE'));
       assert.equal(f.records[0].bookingStatus, 'BOOKED');
     } else {
       await assert.rejects(f.service.recordEligibilityDecision('1', '10', { bookingId: '1', decision: 'ACCEPTED' }, f.authorizations.get('1')), safe('DATABASE_UNAVAILABLE'));

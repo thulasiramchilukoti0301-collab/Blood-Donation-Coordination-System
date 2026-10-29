@@ -50,7 +50,7 @@ export function createBookingRouter({ authService, bookingService, frontendUrl }
   });
   router.patch('/admin/bookings/:bookingId/status', ...admin, csrf, async (req, res, next) => {
     try { noQuery(req); res.json({ success: true,
-      booking: await bookingService.checkIn(req.authAccount.accountId, req.params.bookingId, req.body, req.authSession) }); }
+      booking: await bookingService.updateAdminBookingStatus(req.authAccount.accountId, req.params.bookingId, req.body, req.authSession) }); }
     catch (error) { next(error); }
   });
   router.post('/admin/donors/:donorId/eligibility-decisions', ...admin, csrf, async (req, res, next) => {

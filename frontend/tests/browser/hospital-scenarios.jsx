@@ -12,6 +12,7 @@ import { runBookingScenarios } from './booking-scenarios';
 import { runDonationScenarios } from './donation-scenarios';
 import { runReleaseScenarios } from './release-scenarios';
 import { runAdminDonorScenarios } from './admin-donor-scenarios';
+import { runDonorDashboardScenarios } from './donor-dashboard-scenarios';
 
 const container = document.getElementById('hospital-test-app');
 const report = document.getElementById('hospital-test-result');
@@ -96,6 +97,16 @@ async function mount(path, options = {}) {
       if (current.holdApprovalCsrf) { current.holdApprovalCsrf = false; await new Promise(resolve => { current.releaseApprovalCsrf = resolve; }); }
       if (current.holdAdminDonorCsrf) { current.holdAdminDonorCsrf = false; await new Promise(resolve => { current.releaseAdminDonorCsrf = resolve; }); }
       return response(config, { success: true, csrfToken: (++current.csrf).toString(16).padStart(64, '0') });
+    }
+    if (config.url === '/auth/password' && method === 'post') {
+      if (current.passwordMode === 'wrong') return errorResponse(config, 401, 'INVALID_CURRENT_PASSWORD', 'Current password is incorrect.');
+      current.user = null;
+      return response(config, { success: true, loginRequired: true });
+    }
+    if (config.url === '/donors/me/reports/activity' && method === 'get') {
+      if (current.activityFailure) return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private activity detail');
+      return response(config, { success: true, activity: current.activity ?? { from: null, to: null,
+        bookingCounts: [{ bookingStatus: 'BOOKED', count: 0 }], donationCounts: [{ outcome: 'COLLECTED', count: 0 }] } });
     }
     if (config.url === '/admin/donors' && method === 'get') {
       if (current.adminDonorFailure) { current.adminDonorFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private donor read detail'); }
@@ -256,10 +267,15 @@ async function mount(path, options = {}) {
         payload = { slot };
       } else if (config.url.startsWith('/admin/bookings/') && config.url.endsWith('/status')) {
         const id = config.url.split('/')[3]; const row = current.bookings.find(item => item.bookingId === id);
-        if (!row || row.bookingStatus !== 'BOOKED' || data?.bookingStatus !== 'CHECKED_IN' || data?.reason !== 'STAFF_CHECKED_IN') {
+        const allowed = { CHECKED_IN: 'STAFF_CHECKED_IN', CANCELLED_BY_STAFF: 'STAFF_CANCELLED', NO_SHOW: 'STAFF_NO_SHOW' };
+        if (!row || row.bookingStatus !== 'BOOKED' || allowed[data?.bookingStatus] !== data?.reason) {
           return errorResponse(config, 409, 'BOOKING_CONFLICT', 'Changed');
         }
-        row.bookingStatus = 'CHECKED_IN'; payload = { booking: { bookingId: row.bookingId, donorAccountId: row.donorAccountId, bookingStatus: row.bookingStatus } };
+        row.bookingStatus = data.bookingStatus;
+        row.cancellationReason = data.bookingStatus === 'CANCELLED_BY_STAFF' ? data.reason : null;
+        payload = { booking: { bookingId: row.bookingId, donorAccountId: row.donorAccountId,
+          bookingStatus: current.bookingMode === 'malformed' ? 'BOOKED' : row.bookingStatus,
+          cancellationReason: row.cancellationReason, statusChangedAt: new Date().toISOString() } };
       } else if (config.url.startsWith('/admin/donors/') && config.url.endsWith('/eligibility-decisions')) {
         const row = current.bookings.find(item => item.bookingId === String(data?.bookingId));
         if (!row || row.bookingStatus !== 'CHECKED_IN' || row.donorAccountId !== config.url.split('/')[3]) return errorResponse(config, 409, 'ELIGIBILITY_DECISION_CONFLICT', 'Changed');
@@ -360,7 +376,7 @@ async function mount(path, options = {}) {
     }
     if (config.url === '/auth/logout') { current.user = null; return response(config, { success: true, message: 'You have been signed out.' }); }
     if (config.url === '/donors/me') return response(config, { success: true, profile: {
-      accountId: '321', email: 'donor@example.test', accountStatus: 'PENDING', fullName: 'Isolated Browser Donor',
+      accountId: '321', email: 'donor@example.test', accountStatus: current.user?.accountStatus ?? 'PENDING', fullName: 'Isolated Browser Donor',
       dateOfBirth: '1990-01-01', phone: '123', address: 'Browser address', area: null, reportedBloodGroup: null, confirmedBloodGroup: null,
     } });
     return errorResponse(config, 404, 'NOT_FOUND', 'Unexpected isolated test API request.');
@@ -399,6 +415,8 @@ async function run(name, work) {
 }
 
 async function scenarios() {
+  await runDonorDashboardScenarios({ mount, waitFor, assert, text, button, fill, submit, noOverflow, labels,
+    container, activeDonor, getFixture: () => fixture, run });
   await runAdminDonorScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
     container, adminUser, getFixture: () => fixture, run });
   await runAccountApprovalScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,

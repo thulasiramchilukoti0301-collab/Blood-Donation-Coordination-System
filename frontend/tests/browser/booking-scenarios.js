@@ -85,6 +85,64 @@ export async function runBookingScenarios({ mount, waitFor, assert, text, button
     assert(Boolean(mutation.headers['x-csrf-token']), 'Fresh CSRF used');
     labels(); noOverflow();
   });
+  await run('Admin individual cancellation confirms and sends the fixed pre-appointment transition', async () => {
+    const start = new Date(Date.now() + 60 * 60_000).toISOString(); const end = new Date(Date.now() + 2 * 60 * 60_000).toISOString();
+    const f = await mount('/admin/bookings', { user: adminUser(), bookings: [{ bookingId: '19', donorAccountId: '321', donorName: 'Fixture Donor',
+      donorAccountStatus: 'ACTIVE', hasDonation: false, slotId: '40', slotStatus: 'CLOSED', bookingStatus: 'BOOKED', bookedAt: start,
+      statusChangedAt: start, startsAt: start, endsAt: end, cancellationReason: null }] });
+    await waitFor(() => button('Cancel booking'), 'individual staff cancellation');
+    assert(!button('Mark no-show'), 'No-show is unavailable before slot end');
+    button('Cancel booking').click(); await waitFor(() => confirmation(), 'individual cancellation confirmation');
+    assert(text().includes('BOOKED to CANCELLED_BY_STAFF') && text().includes('Fixture Donor'), 'Confirmation freezes donor and transition');
+    button('Cancel').click(); await pause();
+    assert(!f.calls.some(call => call.url === '/admin/bookings/19/status'), 'Cancelling confirmation performs no mutation');
+    button('Cancel booking').click(); await waitFor(() => confirmation(), 'confirm individual cancellation');
+    button('Confirm cancel individual booking').click();
+    await waitFor(() => text().includes('Cancel individual booking was saved.') && text().includes('Status: CANCELLED_BY_STAFF'), 'Cancelled booking refreshes');
+    const mutation = f.calls.find(call => call.url === '/admin/bookings/19/status' && call.method === 'patch');
+    assert(JSON.stringify(mutation.data) === JSON.stringify({ bookingStatus: 'CANCELLED_BY_STAFF', reason: 'STAFF_CANCELLED' }), 'Exact fixed individual cancellation payload');
+    assert(Boolean(mutation.headers['x-csrf-token']), 'Fresh CSRF used');
+    labels(); noOverflow();
+  });
+  await run('Admin no-show is available only after end, confirms, and recovers conflicts with GET', async () => {
+    const start = new Date(Date.now() - 2 * 60 * 60_000).toISOString(); const end = new Date(Date.now() - 60 * 60_000).toISOString();
+    const f = await mount('/admin/bookings', { user: adminUser(), bookingMode: 'conflict', bookings: [{ bookingId: '20', donorAccountId: '321', donorName: 'Fixture Donor',
+      donorAccountStatus: 'ACTIVE', hasDonation: false, slotId: '40', slotStatus: 'OPEN', bookingStatus: 'BOOKED', bookedAt: start,
+      statusChangedAt: start, startsAt: start, endsAt: end, cancellationReason: null }] });
+    await waitFor(() => button('Mark no-show'), 'ended booking action');
+    assert(!button('Cancel booking'), 'Individual cancellation is no longer available after slot start');
+    button('Mark no-show').click(); await waitFor(() => confirmation(), 'no-show confirmation');
+    assert(text().includes('NO_SHOW') && text().includes('Fixture Donor'), 'Confirmation identifies donor and no-show action');
+    button('Confirm mark no-show').click();
+    await waitFor(() => text().includes('This item changed. Reload the list'), 'Conflict message');
+    assert(f.calls.filter(call => call.url === '/admin/bookings/20/status' && call.method === 'patch').length === 1, 'Conflict is never retried');
+    assert(f.calls.filter(call => call.url === '/admin/bookings' && call.method === 'get').length >= 2, 'Conflict recovery reads the booking list');
+    labels(); noOverflow();
+  });
+  await run('Admin no-show transport uncertainty is not retried and recovers by list read', async () => {
+    const start = new Date(Date.now() - 2 * 60 * 60_000).toISOString(); const end = new Date(Date.now() - 60 * 60_000).toISOString();
+    const f = await mount('/admin/bookings', { user: adminUser(), bookingMode: 'timeout', bookings: [{ bookingId: '21', donorAccountId: '321', donorName: 'Fixture Donor',
+      donorAccountStatus: 'ACTIVE', hasDonation: false, slotId: '40', slotStatus: 'OPEN', bookingStatus: 'BOOKED', bookedAt: start,
+      statusChangedAt: start, startsAt: start, endsAt: end, cancellationReason: null }] });
+    await waitFor(() => button('Mark no-show'), 'ended booking action'); button('Mark no-show').click();
+    await waitFor(() => confirmation(), 'no-show confirmation'); button('Confirm mark no-show').click();
+    await waitFor(() => text().includes('outcome could not be confirmed'), 'uncertain outcome message');
+    assert(f.calls.filter(call => call.url === '/admin/bookings/21/status' && call.method === 'patch').length === 1, 'Uncertain mutation is never retried');
+    assert(f.calls.filter(call => call.url === '/admin/bookings' && call.method === 'get').length >= 2, 'Uncertain recovery uses GET only');
+    noOverflow();
+  });
+  await run('Admin no-show malformed success is uncertain and only reloads the current list', async () => {
+    const start = new Date(Date.now() - 2 * 60 * 60_000).toISOString(); const end = new Date(Date.now() - 60 * 60_000).toISOString();
+    const f = await mount('/admin/bookings', { user: adminUser(), bookingMode: 'malformed', bookings: [{ bookingId: '22', donorAccountId: '321', donorName: 'Fixture Donor',
+      donorAccountStatus: 'ACTIVE', hasDonation: false, slotId: '40', slotStatus: 'OPEN', bookingStatus: 'BOOKED', bookedAt: start,
+      statusChangedAt: start, startsAt: start, endsAt: end, cancellationReason: null }] });
+    await waitFor(() => button('Mark no-show'), 'ended booking action'); button('Mark no-show').click();
+    await waitFor(() => confirmation(), 'no-show confirmation'); button('Confirm mark no-show').click();
+    await waitFor(() => text().includes('outcome could not be confirmed') && text().includes('Status: NO_SHOW'), 'uncertain message with read recovery');
+    assert(f.calls.filter(call => call.url === '/admin/bookings/22/status' && call.method === 'patch').length === 1, 'Malformed success is not retried');
+    assert(f.calls.filter(call => call.url === '/admin/bookings' && call.method === 'get').length >= 2, 'Malformed success recovery uses GET');
+    noOverflow();
+  });
   await run('Admin day-of decision is accessible, visit-scoped, append-only, and uses exact fixed request', async () => {
     const start = new Date(Date.now() - 60_000).toISOString(); const end = new Date(Date.now() + 60 * 60_000).toISOString();
     const f = await mount('/admin/bookings', { user: adminUser(), bookings: [{ bookingId: '1', donorAccountId: '321', donorName: 'Fixture Donor',

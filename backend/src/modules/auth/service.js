@@ -2,6 +2,9 @@ import bcrypt from 'bcrypt';
 import { HttpError } from '../../utils/httpError.js';
 import { BCRYPT_WORK_FACTOR } from './passwordPolicy.js';
 import { requireStoredSession, sessionAuthorization } from '../accounts/sessionAuthorization.js';
+import { createAuditWriter } from '../audit/writer.js';
+import { randomUUID } from 'node:crypto';
+import { validatePasswordChange } from './passwordChange.js';
 
 const LOGIN_FAILURE = Object.freeze({ status: 401, code: 'INVALID_CREDENTIALS', message: 'Email or password is invalid.' });
 
@@ -16,7 +19,9 @@ function databaseFailure(error) {
   return new HttpError(503, 'DATABASE_UNAVAILABLE', 'Database is unavailable or required account/profile schema is missing.');
 }
 
-export function createAuthService({ repository, passwordHasher = bcrypt, bcryptWorkFactor = BCRYPT_WORK_FACTOR }) {
+export function createAuthService({ repository, passwordHasher = bcrypt, bcryptWorkFactor = BCRYPT_WORK_FACTOR,
+  sessionStore, auditWriter = createAuditWriter({ allowedActionCodes: ['ACCOUNT_PASSWORD_CHANGED'] }),
+  operationId = randomUUID }) {
   if (!repository) throw new TypeError('An authentication repository is required.');
 
   function permitted(account) {
@@ -33,6 +38,35 @@ export function createAuthService({ repository, passwordHasher = bcrypt, bcryptW
   }
 
   return {
+    async changePassword(accountId, body, authorization) {
+      const { currentPassword, newPassword } = validatePasswordChange(body);
+      if (!sessionStore?.revokeAccountSessions || !repository.updatePassword) {
+        throw new HttpError(503, 'AUTHENTICATION_UNAVAILABLE', 'Password change is unavailable.');
+      }
+      let replacementHash;
+      try { replacementHash = await passwordHasher.hash(newPassword, bcryptWorkFactor); }
+      catch { throw new HttpError(503, 'AUTHENTICATION_UNAVAILABLE', 'Password change is unavailable.'); }
+      try {
+        return await repository.withLockedAccount(String(accountId), async (locked, connection) => {
+          if (!permitted(locked)) throw new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session.');
+          await requireStoredSession(connection, authorization, locked);
+          let matches;
+          try { matches = await passwordHasher.compare(currentPassword, locked.passwordHash); }
+          catch { throw new HttpError(503, 'AUTHENTICATION_UNAVAILABLE', 'Password change is unavailable.'); }
+          if (!matches) throw new HttpError(401, 'INVALID_CURRENT_PASSWORD', 'Current password is incorrect.');
+          // Bcrypt may wait; the authoritative SID is checked again after it.
+          await requireStoredSession(connection, authorization, locked);
+          if (await repository.updatePassword(connection, String(accountId), locked.passwordHash, replacementHash) !== 1) {
+            throw new HttpError(409, 'PASSWORD_CHANGE_CONFLICT', 'The account changed. Sign in again before changing the password.');
+          }
+          await sessionStore.revokeAccountSessions(String(accountId), connection);
+          await auditWriter.write(connection, { actorAccountId: String(accountId), actionCode: 'ACCOUNT_PASSWORD_CHANGED',
+            subjectType: 'Account', subjectId: String(accountId), reasonCode: 'SELF_SERVICE_PASSWORD_CHANGE',
+            changeSummary: 'Account password changed; sessions revoked', operationId: operationId() });
+          return { success: true, loginRequired: true };
+        });
+      } catch (error) { throw databaseFailure(error); }
+    },
     async registerDonor(donor) {
       let passwordHash;
       try {

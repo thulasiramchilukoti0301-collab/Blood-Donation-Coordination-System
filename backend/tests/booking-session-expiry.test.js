@@ -4,19 +4,23 @@ import { createBookingService } from '../src/modules/booking/service.js';
 import { withAccountLocks } from '../src/modules/accounts/transaction.js';
 import { testAuthorization } from './helpers/session-context.mjs';
 
-const operations = ['book', 'cancel-booking', 'capacity', 'close-slot', 'cancel-slot', 'check-in', 'day-of-decision'];
+const operations = ['book', 'cancel-booking', 'capacity', 'close-slot', 'cancel-slot', 'check-in', 'no-show', 'staff-cancel', 'day-of-decision'];
 for (const operation of operations) {
   for (const expired of [true, false]) {
     test(`${operation}: session ${expired ? 'expiring' : 'remaining valid'} during domain wait is rechecked before writes`, async t => {
       const dayOf = ['check-in', 'day-of-decision'].includes(operation);
-      let now = Date.parse(dayOf ? '2026-10-27T05:00:00Z' : '2026-10-27T00:00:00Z');
+      let now = Date.parse(operation === 'no-show' ? '2026-10-27T06:00:00Z'
+        : operation === 'staff-cancel' ? '2026-10-27T04:00:00Z'
+          : dayOf ? '2026-10-27T05:00:00Z' : '2026-10-27T00:00:00Z');
       const expires = now + 1000;
       t.mock.method(Date, 'now', () => now);
       const admin = !['book', 'cancel-booking'].includes(operation);
       const actor = admin ? '1' : '10';
       const auth = testAuthorization(actor, admin ? 'ADMIN' : 'DONOR', 'ACTIVE');
-      const slot = { slotId: '40', startsAt: dayOf ? '2026-10-27T10:00:00+05:30' : '2026-11-01T10:00:00+05:30',
-        endsAt: dayOf ? '2026-10-27T11:00:00+05:30' : '2026-11-01T11:00:00+05:30', capacity: 1, slotStatus: 'OPEN' };
+      const slot = { slotId: '40', startsAt: operation === 'no-show' ? '2026-10-27T09:00:00+05:30'
+        : dayOf ? '2026-10-27T10:00:00+05:30' : operation === 'staff-cancel' ? '2026-10-27T10:30:00+05:30' : '2026-11-01T10:00:00+05:30',
+        endsAt: operation === 'no-show' ? '2026-10-27T09:30:00+05:30' : dayOf ? '2026-10-27T11:00:00+05:30'
+          : operation === 'staff-cancel' ? '2026-10-27T11:30:00+05:30' : '2026-11-01T11:00:00+05:30', capacity: 1, slotStatus: 'OPEN' };
       const row = { bookingId: '2', slotId: '40', donorAccountId: '10', bookingStatus: operation === 'day-of-decision' ? 'CHECKED_IN' : 'BOOKED' };
       const initial = structuredClone({ slot, row });
       const writes = []; const events = []; const calls = [];
@@ -66,6 +70,8 @@ for (const operation of operations) {
       const pending = operation === 'book' ? service.createBooking(actor, { slotId: '40' }, auth)
         : operation === 'cancel-booking' ? service.cancelBooking(actor, '2', {}, auth)
           : operation === 'check-in' ? service.checkIn(actor, '2', { bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }, auth)
+            : operation === 'no-show' ? service.updateAdminBookingStatus(actor, '2', { bookingStatus: 'NO_SHOW', reason: 'STAFF_NO_SHOW' }, auth)
+              : operation === 'staff-cancel' ? service.updateAdminBookingStatus(actor, '2', { bookingStatus: 'CANCELLED_BY_STAFF', reason: 'STAFF_CANCELLED' }, auth)
             : operation === 'day-of-decision' ? service.recordEligibilityDecision(actor, '10', { bookingId: '2', decision: 'ACCEPTED' }, auth)
               : service.updateSlot(actor, '40', operation === 'capacity' ? { capacity: 2 }
             : { slotStatus: operation === 'close-slot' ? 'CLOSED' : 'CANCELLED',
@@ -88,7 +94,7 @@ for (const operation of operations) {
         assert.equal(calls[calls.indexOf('write') - 1], 'session', 'Final SID check immediately precedes first mutation');
       }
       assert.equal(calls.filter(value => value === 'session').length, 2);
-      assert.deepEqual(calls.filter(value => value.startsWith('account:')), admin && ['check-in', 'day-of-decision'].includes(operation)
+      assert.deepEqual(calls.filter(value => value.startsWith('account:')), admin && ['check-in', 'no-show', 'staff-cancel', 'day-of-decision'].includes(operation)
         ? ['account:1', 'account:10'] : [`account:${actor}`]);
       assert.ok(calls.lastIndexOf('account:10') < calls.indexOf('session'));
       assert.ok(calls.indexOf('session') < calls.indexOf('slot-lock'));

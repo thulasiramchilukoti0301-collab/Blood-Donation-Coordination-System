@@ -7,10 +7,10 @@ import { bookingQuery, eligibility, eligibilityDecisionInput, fields, id, overla
 
 const auditCodes = ['DONATION_SLOT_CREATED', 'DONATION_SLOT_UPDATED', 'DONATION_SLOT_CLOSED',
   'DONATION_SLOT_CANCELLED', 'BOOKING_CREATED', 'BOOKING_CANCELLED_BY_DONOR', 'BOOKING_CANCELLED_BY_STAFF',
-  'BOOKING_CHECKED_IN', 'ELIGIBILITY_DECISION_RECORDED'];
+  'BOOKING_MARKED_NO_SHOW', 'BOOKING_CHECKED_IN', 'ELIGIBILITY_DECISION_RECORDED'];
 const conflict = (code, message) => new HttpError(409, code, message);
 const slotConflict = () => conflict('SLOT_CONFLICT', 'The slot changed or is no longer available. Refresh the list.');
-const bookingConflict = () => conflict('BOOKING_CONFLICT', 'This booking cannot be created or cancelled. Refresh the list.');
+const bookingConflict = () => conflict('BOOKING_CONFLICT', 'This booking cannot be changed with the requested action. Refresh the list.');
 const active = (account, role) => {
   if (!account || account.accountStatus !== 'ACTIVE') throw new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'Sign in with an active account.');
   if (account.role !== role) throw new HttpError(403, 'FORBIDDEN', 'You do not have access to this resource.');
@@ -178,11 +178,17 @@ export function createBookingService({ repository, auditWriter = createAuditWrit
         return { bookingId, bookingStatus: 'CANCELLED_BY_DONOR', cancelledAt: new Date(clock()).toISOString() };
       });
     },
-    async checkIn(actorId, bookingIdValue, body, authorization) {
+    async updateAdminBookingStatus(actorId, bookingIdValue, body, authorization) {
       const bookingId = id(bookingIdValue);
       fields(body, ['bookingStatus', 'reason'], ['bookingStatus', 'reason']);
-      if (body.bookingStatus !== 'CHECKED_IN' || body.reason !== 'STAFF_CHECKED_IN') {
-        throw new HttpError(400, 'VALIDATION_ERROR', 'Only the supported check-in action is accepted.');
+      const actions = {
+        CHECKED_IN: { reason: 'STAFF_CHECKED_IN', actionCode: 'BOOKING_CHECKED_IN', summary: 'Donor checked in for appointment' },
+        CANCELLED_BY_STAFF: { reason: 'STAFF_CANCELLED', actionCode: 'BOOKING_CANCELLED_BY_STAFF', summary: 'Admin cancelled individual booking' },
+        NO_SHOW: { reason: 'STAFF_NO_SHOW', actionCode: 'BOOKING_MARKED_NO_SHOW', summary: 'Booking marked as donor no-show' },
+      };
+      const action = actions[body.bookingStatus];
+      if (!action || body.reason !== action.reason) {
+        throw new HttpError(400, 'VALIDATION_ERROR', 'The requested booking status action is not supported.');
       }
       try {
         const hint = await bookingHint(bookingId);
@@ -192,17 +198,26 @@ export function createBookingService({ repository, auditWriter = createAuditWrit
           const slot = await repository.lockSlot(connection, hint.slotId);
           const row = await repository.lockAdminBooking(connection, bookingId);
           if (!slot || !row || row.donorAccountId !== hint.donorAccountId || row.slotId !== hint.slotId) throw bookingConflict();
-          if (row.bookingStatus !== 'BOOKED' || slot.slotStatus === 'CANCELLED') throw bookingConflict();
+          if (row.bookingStatus !== 'BOOKED' || slot.slotStatus === 'CANCELLED'
+            || await repository.bookingHasDonation(connection, bookingId)) throw bookingConflict();
           await authorizeMutation();
           const now = clock();
-          if (!(storedTime(slot.startsAt).utc <= now && now < storedTime(slot.endsAt).utc)) throw bookingConflict();
-          if (await repository.updateBooking(connection, bookingId, 'CHECKED_IN', null) !== 1) throw bookingConflict();
-          await audit(connection, actor, 'BOOKING_CHECKED_IN', 'Booking', bookingId,
-            'STAFF_CHECKED_IN', 'Donor checked in for appointment');
+          const startsAt = storedTime(slot.startsAt).utc;
+          const endsAt = storedTime(slot.endsAt).utc;
+          const permittedTime = body.bookingStatus === 'CHECKED_IN' ? startsAt <= now && now < endsAt
+            : body.bookingStatus === 'CANCELLED_BY_STAFF' ? now < startsAt : now >= endsAt;
+          if (!permittedTime) throw bookingConflict();
+          const cancellationReason = body.bookingStatus === 'CANCELLED_BY_STAFF' ? action.reason : null;
+          if (await repository.updateBooking(connection, bookingId, body.bookingStatus, cancellationReason) !== 1) throw bookingConflict();
+          await audit(connection, actor, action.actionCode, 'Booking', bookingId,
+            action.reason, action.summary);
           return { bookingId, donorAccountId: row.donorAccountId, slotId: row.slotId,
-            bookingStatus: 'CHECKED_IN', statusChangedAt: new Date(now).toISOString() };
+            bookingStatus: body.bookingStatus, cancellationReason, statusChangedAt: new Date(now).toISOString() };
         }, [hint.donorAccountId]);
       } catch (error) { throw safeAccountError(error); }
+    },
+    checkIn(actorId, bookingIdValue, body, authorization) {
+      return this.updateAdminBookingStatus(actorId, bookingIdValue, body, authorization);
     },
     async recordEligibilityDecision(actorId, donorIdValue, body, authorization) {
       const donorId = id(donorIdValue);

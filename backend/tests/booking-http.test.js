@@ -15,7 +15,7 @@ async function fixture(principal) {
     async createSlot(id, body, session) { calls.push(['createSlot', id, body, session]); return { slotId: '3' }; },
     async updateSlot(id, slotId, body, session) { calls.push(['updateSlot', id, slotId, body, session]); return { slotId }; },
     async cancelBooking(id, bookingId, body, session) { calls.push(['cancelBooking', id, bookingId, body, session]); return { bookingId }; },
-    async checkIn(id, bookingId, body, session) { calls.push(['checkIn', id, bookingId, body, session]); return { bookingId, bookingStatus: 'CHECKED_IN' }; },
+    async updateAdminBookingStatus(id, bookingId, body, session) { calls.push(['updateAdminBookingStatus', id, bookingId, body, session]); return { bookingId, bookingStatus: body.bookingStatus, cancellationReason: body.bookingStatus === 'CANCELLED_BY_STAFF' ? body.reason : null }; },
     async recordEligibilityDecision(id, donorId, body, session) { calls.push(['recordEligibilityDecision', id, donorId, body, session]); return { donorAccountId: donorId }; },
   };
   const app = express(); app.use(express.json());
@@ -62,25 +62,29 @@ test('Admin list and slot mutation remain role-scoped and reject unexpected quer
   } finally { await f.close(); }
 });
 
-test('staff check-in and day-of decision use exact Admin routes, CSRF, and session-derived actor', async () => {
+test('Admin booking status actions and day-of decision use exact routes, CSRF, and session-derived actor', async () => {
   const f = await fixture({ accountId: '1', role: 'ADMIN', accountStatus: 'ACTIVE' });
   try {
-    const checkin = await fetch(`${f.base}/admin/bookings/42/status`, { method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', 'X-CSRF-Token': token },
-      body: JSON.stringify({ bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }) });
-    assert.equal(checkin.status, 200); assert.equal((await checkin.json()).booking.bookingStatus, 'CHECKED_IN');
+    for (const [bookingStatus, reason] of [['CHECKED_IN', 'STAFF_CHECKED_IN'], ['CANCELLED_BY_STAFF', 'STAFF_CANCELLED'], ['NO_SHOW', 'STAFF_NO_SHOW']]) {
+      const response = await fetch(`${f.base}/admin/bookings/42/status`, { method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', 'X-CSRF-Token': token },
+        body: JSON.stringify({ bookingStatus, reason }) });
+      assert.equal(response.status, 200); assert.equal((await response.json()).booking.bookingStatus, bookingStatus);
+    }
     const decision = await fetch(`${f.base}/admin/donors/10/eligibility-decisions`, { method: 'POST',
       headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', 'X-CSRF-Token': token },
       body: JSON.stringify({ bookingId: '42', decision: 'ACCEPTED' }) });
     assert.equal(decision.status, 201);
-    assert.deepEqual(f.calls.filter(call => ['checkIn', 'recordEligibilityDecision'].includes(call[0])).map(call => call.slice(0, 4)), [
-      ['checkIn', '1', '42', { bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }],
+    assert.deepEqual(f.calls.filter(call => ['updateAdminBookingStatus', 'recordEligibilityDecision'].includes(call[0])).map(call => call.slice(0, 4)), [
+      ['updateAdminBookingStatus', '1', '42', { bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }],
+      ['updateAdminBookingStatus', '1', '42', { bookingStatus: 'CANCELLED_BY_STAFF', reason: 'STAFF_CANCELLED' }],
+      ['updateAdminBookingStatus', '1', '42', { bookingStatus: 'NO_SHOW', reason: 'STAFF_NO_SHOW' }],
       ['recordEligibilityDecision', '1', '10', { bookingId: '42', decision: 'ACCEPTED' }],
     ]);
     assert.equal(f.calls[0][4].principal.accountId, '1');
     const missingCsrf = await fetch(`${f.base}/admin/bookings/42/status`, { method: 'PATCH',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN' }) });
-    assert.equal(missingCsrf.status, 403); assert.equal(f.calls.filter(call => call[0] === 'checkIn').length, 1);
+    assert.equal(missingCsrf.status, 403); assert.equal(f.calls.filter(call => call[0] === 'updateAdminBookingStatus').length, 3);
   } finally { await f.close(); }
 });
 

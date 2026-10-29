@@ -7,7 +7,9 @@ import { AuthProvider } from './features/auth/AuthProvider';
 import AuthLayout from './features/auth/AuthLayout';
 import LoginPage from './features/auth/LoginPage';
 import DonorProfilePage from './features/donors/DonorProfilePage';
+import DonorDashboardPage from './features/donors/DonorDashboardPage';
 import AccountStatusPage from './features/auth/AccountStatusPage';
+import AccountSettingsPage from './features/auth/AccountSettingsPage';
 import HospitalProfilePage from './features/hospitals/HospitalProfilePage';
 import AdminHospitalManagement from './features/hospitals/AdminHospitalManagement';
 import AccountApprovalPage from './features/accounts/AccountApprovalPage';
@@ -80,6 +82,7 @@ export default function App() {
     <Route path="/" element={<FoundationHome />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/donor/profile" element={<DonorProfilePage />} />
+    <Route path="/donor" element={<DonorDashboardPage />} />
     <Route path="/donor/eligibility" element={<EligibilityPage />} />
     <Route path="/donor/slots" element={<DonorSlotsPage />} />
     <Route path="/donor/bookings" element={<DonorBookingsPage />} />
@@ -96,6 +99,7 @@ export default function App() {
     <Route path="/admin/inventory" element={<InventoryPage />} />
     <Route path="/admin/inventory/:bloodUnitId" element={<UnitDetailPage />} />
     <Route path="/account/status" element={<AccountStatusPage />} />
+    <Route path="/account/settings" element={<AccountSettingsPage />} />
     <Route path="/unauthorized" element={<AuthLayout><section className="auth-intro"><p className="rose-eyebrow">Access denied</p><h1>This account cannot open this page</h1><p>Use the account navigation to view the pages available for your role.</p><a className="rose-action-link" href="/account/status">View account status</a></section></AuthLayout>} />
     <Route path="*" element={<NotFound />} />
   </Routes></AuthProvider>;

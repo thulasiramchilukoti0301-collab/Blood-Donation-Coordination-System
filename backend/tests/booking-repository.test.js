@@ -46,6 +46,20 @@ test('inserted unsigned BIGINT IDs stay exact strings and unsafe driver numbers 
   await assert.rejects(repository.insertBooking(unsafe, '10', '40'), /Invalid inserted identifier/u);
 });
 
+test('booking status update is conditional on BOOKED and persists only the supplied fixed reason', async () => {
+  const calls = [];
+  const connection = { async execute(sql, params) { calls.push({ sql, params }); return [{ affectedRows: 1 }]; } };
+  const repository = createBookingRepository({});
+  assert.equal(await repository.updateBooking(connection, '42', 'CANCELLED_BY_STAFF', 'STAFF_CANCELLED'), 1);
+  assert.equal(await repository.updateBooking(connection, '43', 'NO_SHOW', null), 1);
+  for (const call of calls) {
+    assert.match(call.sql, /UPDATE Booking SET booking_status = \?, cancellation_reason = \?,\s*status_changed_at = CURRENT_TIMESTAMP WHERE booking_id = \? AND booking_status = 'BOOKED'/u);
+  }
+  assert.deepEqual(calls.map(call => call.params), [
+    ['CANCELLED_BY_STAFF', 'STAFF_CANCELLED', '42'], ['NO_SHOW', null, '43'],
+  ]);
+});
+
 test('booking lists expose only safe status/decision context and use deterministic latest-decision ordering', async () => {
   const calls = [];
   const database = { async execute(sql, params) {

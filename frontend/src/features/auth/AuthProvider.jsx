@@ -77,9 +77,22 @@ export function AuthProvider({ children }) {
     setRestoreError('');
   }, [getCsrfToken]);
 
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    const version = authVersion.current;
+    const csrfToken = await getCsrfToken();
+    if (version !== authVersion.current) return { obsolete: true };
+    const { data } = await api.post('/auth/password', { currentPassword, newPassword }, { headers: { 'X-CSRF-Token': csrfToken } });
+    if (version !== authVersion.current) return { obsolete: true };
+    if (data?.success !== true || data.loginRequired !== true) throw Object.assign(new Error('Password change outcome is uncertain.'), { code: 'PASSWORD_OUTCOME_UNKNOWN' });
+    authVersion.current += 1;
+    setUser(null);
+    setRestoreError('');
+    return { success: true };
+  }, [getCsrfToken]);
+
   const authLifecycle = authVersion.current;
-  const value = useMemo(() => ({ user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore, authLifecycle, getAuthLifecycle }),
-    [user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, restore, authLifecycle, getAuthLifecycle]);
+  const value = useMemo(() => ({ user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, changePassword, restore, authLifecycle, getAuthLifecycle }),
+    [user, loading, restoreError, login, registerDonor, updateDonorProfile, logout, changePassword, restore, authLifecycle, getAuthLifecycle]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

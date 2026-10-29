@@ -16,6 +16,11 @@ function safeInsertId(value) {
 
 export function createAuthRepository(databasePool) {
   return {
+    async updatePassword(connection, accountId, previousHash, replacementHash) {
+      const [result] = await connection.execute(`UPDATE Account SET password_hash = ?
+        WHERE account_id = ? AND password_hash = ?`, [replacementHash, accountId, previousHash]);
+      return result.affectedRows;
+    },
     withLockedAccount(accountId, work) {
       return withAccountLocks(requirePool(databasePool), [accountId], (connection, accounts) => work(accounts.get(accountId), connection));
     },
