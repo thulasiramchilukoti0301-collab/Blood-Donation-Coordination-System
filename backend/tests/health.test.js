@@ -62,14 +62,17 @@ test('database driver failures return 503 without leaking secrets', async () => 
   assert.doesNotMatch(body, /private-test-secret|SELECT|stack|password/);
 });
 
-test('unknown and unimplemented business routes return JSON 404', async () => {
-  for (const path of ['/api/unknown', '/api/inventory']) {
+test('unknown routes return JSON 404; configured protected routes fail closed', async () => {
+  for (const path of ['/api/unknown']) {
     const response = await fetch(`${baseUrl}${path}`);
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), {
       success: false, error: { code: 'NOT_FOUND', message: 'API route not found.' },
     });
   }
+  const inventoryUnavailable = await fetch(`${baseUrl}/api/inventory`);
+  assert.equal(inventoryUnavailable.status, 503);
+  assert.equal((await inventoryUnavailable.json()).error.code, 'AUTHENTICATION_NOT_CONFIGURED');
   const authUnavailable = await fetch(`${baseUrl}/api/auth/me`);
   assert.equal(authUnavailable.status, 503);
   assert.equal((await authUnavailable.json()).error.code, 'AUTHENTICATION_NOT_CONFIGURED');

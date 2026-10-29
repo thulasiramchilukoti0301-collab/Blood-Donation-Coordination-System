@@ -1,38 +1,6 @@
 # UI Design Themes
 
-This document records the selected visual themes for the Blood Donation Coordination System. Rose Quartz Focus remains selected for shared Login/Donor registration, access/error, Donor Profile read/edit, and account-status surfaces. **Mint Gauge** is selected for Hospital Registration/Profile, Screen 24 Admin Hospital Management, and the shared Account management supporting flow at `/admin/accounts`; scoped Mint styles do not change shared or Donor appearances or assign a theme to the rest of Donor Management. **Sky Pipeline** is assigned to Feature 7 Screens 12, 13, 14, and 25. **Indigo Inventory** is selected for Feature 8 Screens 26 and 27. **Cobalt Ledger** is scoped to Feature 9 Screen 28. **Feature 10 Teal Dashboard** is scoped to Admin Dashboard, Hospital Dashboard and Reports & Analytics; styles are namespaced to the dashboard theme and do not alter prior surfaces. Other unimplemented screens remain open for later assignment.
-
-## Cobalt Ledger
-
-| Token / property | Value |
-|---|---|
-| Background | `#F4F7FA` |
-| White surfaces | `#FFFFFF` |
-| Main text | `#203247` |
-| Muted text | `#62758A` |
-| Primary / strong action | `#286A78` / `#1D5561` |
-| Borders | `#D9E2E9` |
-| Quiet surface | `#EAF2F5` |
-| Keyboard focus | `#D18A37` |
-| Typography | Manrope headings; DM Sans body and controls |
-| Interaction | Structured filter form, responsive event table/cards, visible focus, reduced motion |
-
-## Indigo Inventory
-
-| Token / property | Value |
-|---|---|
-| Background | `#F5F6FF` |
-| White surfaces | `#FFFFFF` |
-| Primary accent | `#5856D6` |
-| Main text / navy | `#25254B` |
-| Lavender surface | `#E9E8FF` |
-| Borders | `#DCDEF2` |
-| Success | `#259C79` |
-| Warning | `#E7A33E` |
-| Error | `#D95765` |
-| Muted | `#73758F` (contrast-safe body copy may use a darker variant) |
-| Fonts | Manrope headings; DM Sans body/UI |
-| Interaction | Responsive data tables/cards, visible keyboard focus, read-only notices and reduced-motion support |
+This document records three available visual theme options for the Blood Donation Coordination System. Rose Quartz Focus remains selected for the implemented shared Login/Donor registration, access/error, Donor Profile read/edit, account-status, and Donor eligibility/booking plus Screen 9 Donation History surfaces. The user selected **Mint Gauge for Hospital Registration, Hospital Profile, and Screen 24 Admin Hospital Management**, replacing the prior Hospital Rose Quartz Focus choice; scoped Hospital styles do not change the existing shared or Donor appearances. The user also selected **Mint Gauge for the shared Account management flow at `/admin/accounts`** and the bounded Admin slot/booking, Screen 20 Donation Processing, and Screens 21–23 release/inventory pages; these choices do not assign a theme to other screens. Theme assignments remain OPEN for other unimplemented screens in `ui-screen-map.md`; the user chooses each later page's theme. Recommendations may favor Mint Gauge for quantities/status and Sky Pipeline for processes, but those recommendations are not assignments.
 
 ## Mint Gauge
 
@@ -156,4 +124,4 @@ For the implemented Rose Quartz surfaces, contrast-safe action and muted text va
 
 Mint top pill tabs, Sky floating bottom dock, and Rose right icon rail are optional examples from the source reference, not three navigation prescriptions. Keep the same shared navigation placement and behavior across every theme. The final common navigation layout remains undecided.
 
-Before each later screen/page design or implementation task, recommend a theme suited to that page's purpose and let the user choose. Apply the user's choice to that page. Hospital Registration/Profile and Screen 24 Admin Hospital Management are selected Mint Gauge surfaces; existing unrelated page appearances remain unchanged, and future page assignments remain OPEN until chosen by the user.
+Before each later screen/page design or implementation task, recommend a theme suited to that page's purpose and let the user choose. Apply the user's choice to that page. Hospital Registration/Profile, Screen 24 Admin Hospital Management, and bounded Screens 21–23 are selected Mint Gauge surfaces; existing unrelated page appearances remain unchanged, and future page assignments remain OPEN until chosen by the user.

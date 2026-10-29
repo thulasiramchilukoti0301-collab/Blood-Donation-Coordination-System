@@ -1,6 +1,6 @@
 # Database setup and collaboration
 
-**Current Feature 8 update (2026-10-29):** migration **009_compatibility_allocation.sql** and its internal FEFO selector passed the disposable MySQL 8.0.39 checks recorded in [Feature 8 implementation and handoff](../docs/feature8-implementation.md). This verifies storage and preview selection, not a production allocation operation; the allocation POST remains unmounted. Migration 009 is ready for reviewed, manual development installation after read-only preflight. Feature 7 migration **012_request_status_history.sql** remains separately disposable-verified, with bounded request APIs mounted; development installation remains manual. 010 remains AuditEvent-only.
+The [migration and installation ledger](migration-ledger.md) records numbered SQL source revisions, dependencies, ownership, and separately attributed local installation evidence for Thulasi and Lathikaa. Unknown dates or installed revisions are explicitly marked **UNKNOWN**. Update the ledger during future SQL handoffs; do not infer an installed revision from table presence.
 
 ## Hospital storage and Feature 6 status
 
@@ -22,7 +22,7 @@ The bounded [first-Admin CLI](../docs/first-admin-bootstrap.md) uses the existin
 
 ## Current Phase 3 boundary
 
-The later [Feature 7 database milestone](../docs/blood-request-storage.md) authors 008 HospitalRequest plus two row guards, and prepares the separately coordinated history table/AFTER UPDATE trigger in `proposals/request-status-history.sql`. Its deployment migration number stays UNASSIGNED; the proposal is not in automatic setup. Six static tests, the complete 143-test backend suite and a separately authorized MySQL 8.0.39 disposable run passed (68 negative checks; 11 request/16 history fixtures rolled back; context cleared/connection closed). The test schema was removed and isolated server stopped. This verifies storage/proposal mechanics, not real Allocation counts, pre-issue cancellation, web sessions, concurrency or development installation. No API/UI is implemented; Feature 7's future four screens use Sky Pipeline while Feature 6 stays Mint Gauge.
+See the [database migration and installation ledger](migration-ledger.md) for the eight authored numbered migration artifacts with reported installation evidence, shared reference seed, session infrastructure, inventory view, source revisions, dependencies, and separate developer attribution. The current Eligibility & Slot Booking application milestone adds **no SQL changes**; its 2026-10-27 USER-RUN flow and audit observations are recorded in the [feature guide](../docs/eligibility-booking.md#user-run-booking-evidence-reported-2026-10-27).
 
 The artifacts for the completed Account/BloodGroup foundation and Donor milestones, user-verified eligibility/booking, Donation storage, BloodUnit storage, and grouped read-only inventory view milestones are:
 
@@ -278,7 +278,7 @@ if ($mysqlExitCode -ne 0) { throw 'Disposable schema assembly failed; inspect th
 
 Run `database/tests/verify-eligibility-booking.mjs` with `PHASE3_BOOKING_TEST_DATABASE` set to that exact schema name and the established temporary `PHASE3_TEST_DB_USER` / `PHASE3_TEST_DB_PASSWORD` values. Set `DB_HOST=127.0.0.1` and `DB_PORT=3306` explicitly if the private backend environment file is absent. Use a disposable-only identity with the required schema DML and metadata-read privileges; never use the verifier against the development database. Clear temporary credential environment variables in `finally` as in the existing verifier examples. The verifier inserts synthetic Account/Donor prerequisites and at least ten records in each of the three new tables in a rollback-only transaction. A pass checks storage constraints and safe expected SQL errors only; it does not verify concurrency, capacity races, overlapping bookings, authorization, eligibility calculations, or lifecycle workflows.
 
-The OPEN booking evaluation date, `REVIEW_REQUIRED` blocking, and indefinite-review semantics remain unresolved and do not block creation of these approved tables. Capacity occupancy, donor overlap, schedule edits, actor roles, current account state, eligibility evaluation, and lifecycle transitions remain future transactional/service enforcement; do not infer that the DDL or storage verifier implements them.
+The later bounded application milestone resolves booking evaluation at the selected appointment's IST date, `REVIEW_REQUIRED` blocking until superseded, and inclusive temporary deferral; see `../docs/eligibility-booking.md`. Its service implements the specified capacity, donor overlap, schedule-edit, current Account/session, eligibility and cancellation rules with database-free checks. The DDL and this storage verifier alone do not implement or verify those rules, and real MySQL concurrency/failure and staff attendance transitions remain pending.
 
 ### Donation apply and verification
 

@@ -3,6 +3,28 @@
 Date: 2026-10-29
 Branch: `lathikaa`
 HEAD at inspection: `678b8ac62617346ff47eeecf6b2ad51e96560160`
+## Merged integration update — 2026-10-29
+
+This update supersedes the earlier pre-merge status below. `origin/thulasiram` at verified commit `8129015bf4588d6afd8ce703fbd647889c4ff888` was integrated into `lathikaa`; both the request/audit/report implementation and donor/booking/donation/release implementation are present. The merge preserves routes and role navigation, and the Hospital request link is shown only to ACTIVE Hospitals. No push was performed. Migration 009 was not executed and no development database was contacted.
+
+### Disposable MySQL workflow
+
+The fresh MySQL 9.1 disposable workflow passed **222 assertions** using the production Express app, MySQL repositories and services. It covered Hospital/Donor registration and Admin approval; Admin, Hospital and Donor login/profile; an isolated checked-in booking fixture followed by real Admin check-in, same-visit ACCEPTED decision, COLLECTED donation processing and completion; real release approval, AVAILABLE BloodUnit persistence, the two release audit events sharing one operation ID, and inventory/donation reports. It also covered Hospital request creation/review/cancellation, migration 012 trigger history, request audit/log queries, dashboards, CSRF, persistence and AuditEvent-failure rollback. The checked-in appointment was inserted as a disposable fixture so the test need not wait for a future appointment window; subsequent workflow mutations used the real APIs and transactions.
+
+The disposable runner assembled migrations 001–008, 010 and 012, plus auth-session infrastructure; it omitted 009. A test-only empty `Allocation` view supports the pre-allocation cancellation check only. It does not establish live Feature 8 FEFO preview/allocation, request state transition, rollback or concurrency behavior.
+
+### Shared inventory lock contract and allocation gate
+
+The merged release writer locks sorted actor/Donor Accounts, authoritative SID, Donor, DonationSlot, Booking, Donation, BloodGroup, then BloodUnit; booking writers coordinate Account/SID before visit rows. Expiry locks actor/SID then due BloodUnits in expiry order; discard locks actor/SID then a BloodUnit. No allocation writer exists in the merged branch. A safe shared lock order cannot be established for allocation without coordinating the Donation→BloodUnit release order with expiry's BloodUnit-first domain locking, and migration 009 does not enforce agreement between active Allocation rows and `BloodUnit.unit_status`. Therefore no allocation mutation or Confirm Allocation control was added or enabled. Existing read-only compatibility/allocation pages remain intact.
+
+### Integrated checks
+
+- Backend: **420 passed, 0 failed**.
+- Frontend: **95 passed, 0 failed**, sequentially; browser scenarios covered role flows and responsive routes through desktop and narrow mobile widths.
+- Production build: passed; Vite reported the single JavaScript chunk exceeds 500 kB.
+- `git diff --check`: passed after merge resolution.
+
+The application can demonstrate registration through donation release, request workflows, audit, dashboards and reports using the integrated services. Allocation confirmation remains blocked pending an approved shared inventory lock protocol and real 009-backed concurrency/rollback tests.
 
 ## Final integration update — 2026-10-29
 
@@ -183,3 +205,7 @@ The backend uses the existing local configuration. Do not print or share `.env` 
 ## Prior snapshot Git note — superseded
 
 The original report recorded a clean working tree, absent migration 009, and earlier test blockers. Those observations came from a previous snapshot and are superseded by the current verification update at the top of this file. Current modified and untracked paths are listed by `git status --short --branch`; no changes have been committed or pushed.
+
+## Merge integration status � 2026-10-29
+
+Thulasi's verified 8129015bf4588d6afd8ce703fbd647889c4ff888 branch is being integrated with the approved checkpoint. The incoming release implementation provides the donation-testing decision and atomic BloodUnit creation API, plus Admin release/inventory screens. Allocation confirmation remains gated on concurrency and lock-order proof. This section will be updated with combined regression results after resolution.

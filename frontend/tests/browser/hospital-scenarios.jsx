@@ -8,6 +8,11 @@ import { api } from '../../src/services/api';
 import '../../src/styles/global.css';
 import { runAccountApprovalScenarios } from './account-approval-scenarios';
 import { runAccountStatusScenarios } from './account-status-scenarios';
+import { runBookingScenarios } from './booking-scenarios';
+import { runDonationScenarios } from './donation-scenarios';
+import { runReleaseScenarios } from './release-scenarios';
+import { runAdminDonorScenarios } from './admin-donor-scenarios';
+import { runDonorDashboardScenarios } from './donor-dashboard-scenarios';
 
 const container = document.getElementById('hospital-test-app');
 const report = document.getElementById('hospital-test-result');
@@ -22,6 +27,18 @@ const profile = (status = 'PENDING') => ({
 });
 const hospitalUser = (status = 'PENDING') => ({ accountId: '123', role: 'HOSPITAL', accountStatus: status });
 const adminUser = (status = 'ACTIVE') => ({ accountId: '31', role: 'ADMIN', accountStatus: status });
+const activeDonor = () => ({ accountId: '321', role: 'DONOR', accountStatus: 'ACTIVE' });
+const adminDonorFixture = (index = 0, id = String(400 + index)) => ({ donorId: id, email: `donor${id}@example.test`,
+  accountStatus: ['ACTIVE', 'PENDING', 'SUSPENDED'][index % 3], fullName: `Fixture Donor ${String(index + 1).padStart(2, '0')}`,
+  dateOfBirth: '1990-04-12', phone: `555-${String(index + 1).padStart(4, '0')}`, address: 'Fixture address', area: index % 2 ? null : 'Fixture area',
+  reportedBloodGroup: { bloodGroupId: '2', code: 'O+', displayName: 'O positive' }, confirmedBloodGroup: { bloodGroupId: '4', code: 'A+', displayName: 'A positive' },
+  eligibilityAnswers: ['PRIVATE_MEDICAL_SENTINEL'], staffNotes: 'PRIVATE_STAFF_NOTE_SENTINEL', collectionReference: 'PRIVATE_COLLECTION_SENTINEL',
+  createdAt: '2026-10-28T04:30:00.000Z', updatedAt: '2026-10-28T05:00:00.000Z',
+  context: { bookingCount: 2, donationCount: 1, latestBooking: { bookingStatus: 'COMPLETED', appointmentAt: '2026-10-27T10:00:00+05:30' },
+    latestDonation: { outcome: 'COLLECTED', releaseStatus: 'APPROVED', collectedAt: '2026-10-27T11:00:00+05:30' } } });
+const bookingSlots = () => [{ slotId: '40', startsAt: '2026-11-01T10:00:00+05:30', endsAt: '2026-11-01T11:00:00+05:30',
+  capacity: 1, occupied: 0, remaining: 1, slotStatus: 'OPEN', bookable: true,
+  eligibility: { result: 'ELIGIBLE', reasonCode: 'NO_BLOCKING_HISTORY', evaluationDate: '2026-11-01' } }];
 const approvalAccounts = () => Array.from({ length: 23 }, (_, index) => ({
   accountId: index ? String(2000 + index) : '9007199254740993',
   email: index ? `applicant${index}@example.test` : `${'long-email-'.repeat(15)}@example.test`,
@@ -59,7 +76,9 @@ async function mount(path, options = {}) {
   fixture = { user: null, profile: profile(), calls: [], csrf: 0, registrationConflict: null,
     profileFailures: 0, profileEmpty: false, holdProfile: false, loginRole: 'HOSPITAL',
     adminProfiles: adminProfiles(), adminListFailures: 0, adminDetailFailures: 0,
-    approvalAccounts: approvalAccounts(), queueFailures: 0, ...options };
+    adminDonors: Array.from({ length: 23 }, (_, index) => adminDonorFixture(index)), adminDonorMode: 'normal',
+    holdAdminDonorCsrf: false, holdAdminDonorPatch: false,
+    approvalAccounts: approvalAccounts(), queueFailures: 0, bookingSlots: bookingSlots(), bookings: [], donations: [], units: [], ...options };
   const current = fixture;
   api.defaults.adapter = async (config) => {
     const method = config.method.toLowerCase();
@@ -73,9 +92,218 @@ async function mount(path, options = {}) {
         : errorResponse(config, 401, 'AUTHENTICATION_REQUIRED', 'Sign in to continue.');
     }
     if (config.url === '/auth/csrf') {
+      if (current.holdBookingCsrf) { current.holdBookingCsrf = false; await new Promise(resolve => { current.releaseBookingCsrf = resolve; }); }
       if (current.statusCsrfFailure) { current.statusCsrfFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'PRIVATE'); }
       if (current.holdApprovalCsrf) { current.holdApprovalCsrf = false; await new Promise(resolve => { current.releaseApprovalCsrf = resolve; }); }
+      if (current.holdAdminDonorCsrf) { current.holdAdminDonorCsrf = false; await new Promise(resolve => { current.releaseAdminDonorCsrf = resolve; }); }
       return response(config, { success: true, csrfToken: (++current.csrf).toString(16).padStart(64, '0') });
+    }
+    if (config.url === '/auth/password' && method === 'post') {
+      if (current.passwordMode === 'wrong') return errorResponse(config, 401, 'INVALID_CURRENT_PASSWORD', 'Current password is incorrect.');
+      current.user = null;
+      return response(config, { success: true, loginRequired: true });
+    }
+    if (config.url === '/donors/me/reports/activity' && method === 'get') {
+      if (current.activityFailure) return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private activity detail');
+      return response(config, { success: true, activity: current.activity ?? { from: null, to: null,
+        bookingCounts: [{ bookingStatus: 'BOOKED', count: 0 }], donationCounts: [{ outcome: 'COLLECTED', count: 0 }] } });
+    }
+    if (config.url === '/admin/donors' && method === 'get') {
+      if (current.adminDonorFailure) { current.adminDonorFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private donor read detail'); }
+      const params = config.params || {};
+      let rows = current.adminDonors.filter(row => (!params.accountStatus || row.accountStatus === params.accountStatus)
+        && (!params.search || [row.donorId, row.fullName, row.phone, row.area || ''].some(value => value.toLowerCase().includes(params.search.toLowerCase())))
+        && (!params.bloodGroupId || (params.groupMatch !== 'CONFIRMED' && row.reportedBloodGroup?.bloodGroupId === params.bloodGroupId)
+          || (params.groupMatch !== 'REPORTED' && row.confirmedBloodGroup?.bloodGroupId === params.bloodGroupId)));
+      rows = rows.sort((a, b) => a.fullName.localeCompare(b.fullName) || (BigInt(a.donorId) < BigInt(b.donorId) ? -1 : 1));
+      const page = Number(params.page || 1);
+      return response(config, { success: true, donors: structuredClone(rows.slice((page - 1) * 20, page * 20).map(({ email, dateOfBirth, address, createdAt, updatedAt, context, ...safe }) => safe)),
+        pagination: { page, pageSize: 20, total: rows.length } });
+    }
+    if (/^\/admin\/donors\/\d+$/u.test(config.url) && method === 'get') {
+      const saved = current.adminDonors.find(row => row.donorId === config.url.split('/').at(-1));
+      if (!saved) return errorResponse(config, 404, 'DONOR_NOT_FOUND', 'Donor not found.');
+      return response(config, { success: true, donor: structuredClone(saved) });
+    }
+    if (/^\/admin\/donors\/\d+$/u.test(config.url) && method === 'patch') {
+      if (current.adminDonorMode === 'conflict') return errorResponse(config, 409, 'DONOR_EDIT_CONFLICT', 'Donor changed.');
+      const saved = current.adminDonors.find(row => row.donorId === config.url.split('/').at(-1));
+      if (!saved) return errorResponse(config, 404, 'DONOR_NOT_FOUND', 'Donor not found.');
+      if (current.holdAdminDonorPatch) { current.holdAdminDonorPatch = false; await new Promise(resolve => { current.releaseAdminDonorPatch = resolve; }); }
+      const { reasonCode, originalValues, confirmedBloodGroupId, ...patch } = data;
+      if (!originalValues || Object.keys(originalValues).length !== Object.keys(patch).length + Number(confirmedBloodGroupId !== undefined)
+        || Object.entries(originalValues).some(([field, original]) =>
+          (field === 'confirmedBloodGroupId' ? saved.confirmedBloodGroup?.bloodGroupId ?? null : saved[field]) !== original)) {
+        return errorResponse(config, 409, 'DONOR_EDIT_CONFLICT', 'Donor changed.');
+      }
+      Object.assign(saved, patch);
+      if (confirmedBloodGroupId) saved.confirmedBloodGroup = { bloodGroupId: confirmedBloodGroupId,
+        code: ({ '1': 'O-', '2': 'O+', '3': 'A-', '4': 'A+', '5': 'B-', '6': 'B+', '7': 'AB-', '8': 'AB+' })[confirmedBloodGroupId], displayName: 'Fixture confirmed group' };
+      if (current.adminDonorMode === 'malformed') return response(config, { success: true, donor: { ...saved, donorId: '0' } });
+      saved.updatedAt = new Date().toISOString();
+      return response(config, { success: true, donor: structuredClone(saved) });
+    }
+    if (config.url === '/donors/me/eligibility' && method === 'get') return response(config, { success: true,
+      eligibility: { result: 'ELIGIBLE', reasonCode: 'NO_BLOCKING_HISTORY', evaluationDate: '2026-10-27',
+        nextEligibleDate: null, deferredUntil: null, latestDecision: null } });
+    if (config.url === '/donation-slots' && method === 'get') {
+      if (current.bookingReadFailure) { current.bookingReadFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private details'); }
+      const slots = current.bookingSlots.filter(slot => current.user?.role === 'ADMIN'
+        ? (!config.params?.slotStatus || slot.slotStatus === config.params.slotStatus) : slot.slotStatus === 'OPEN');
+      const page = Number(config.params?.page ?? 1);
+      return response(config, { success: true, slots: structuredClone(slots.slice((page - 1) * 20, page * 20)), pagination: { page, pageSize: 20, total: slots.length } });
+    }
+    if (['/donors/me/bookings', '/admin/bookings'].includes(config.url) && method === 'get') {
+      if (current.bookingReadAuth) { current.bookingReadAuth = false; return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Session unavailable.'); }
+      if (current.bookingReadFailure) { current.bookingReadFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private details'); }
+      const admin = config.url === '/admin/bookings';
+      const rows = current.bookings.filter(row => (admin || row.donorAccountId === current.user?.accountId)
+        && (!config.params?.bookingStatus || row.bookingStatus === config.params.bookingStatus));
+      const page = Number(config.params?.page ?? 1);
+      return response(config, { success: true, bookings: structuredClone(rows.slice((page - 1) * 20, page * 20)), pagination: { page, pageSize: 20, total: rows.length } });
+    }
+    if (['/admin/donations', '/donors/me/donations'].includes(config.url) && method === 'get') {
+      if (current.donationReadFailure) { current.donationReadFailure = false; return errorResponse(config, 503, 'DATABASE_UNAVAILABLE', 'Private'); }
+      const admin = config.url === '/admin/donations';
+      const rows = current.donations.filter(row => (admin || row.donorAccountId === current.user?.accountId)
+        && (!config.params?.donorAccountId || row.donorAccountId === config.params.donorAccountId)
+        && (!config.params?.outcome || row.outcome === config.params.outcome)
+        && (!config.params?.releaseStatus || row.releaseStatus === config.params.releaseStatus)
+        && (!config.params?.from || row.createdAt.slice(0, 10) >= config.params.from)
+        && (!config.params?.to || row.createdAt.slice(0, 10) <= config.params.to));
+      const page = Number(config.params?.page ?? 1);
+      return response(config, { success: true, donations: structuredClone(rows.slice((page - 1) * 20, page * 20)),
+        pagination: { page, pageSize: 20, total: rows.length }, ...(admin ? {} : { nextEligibleDate: current.nextEligibleDate ?? null }) });
+    }
+    if (config.url === '/admin/donations' && method === 'post') {
+      if (current.holdDonationMutation) { current.holdDonationMutation = false; await new Promise(resolve => { current.releaseDonationMutation = resolve; }); }
+      if (current.donationMode === 'conflict') return errorResponse(config, 409, 'DONATION_CONFLICT', 'Changed');
+      if (current.donationMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
+      if (current.donationMode === 'validation') return errorResponse(config, 400, 'VALIDATION_ERROR', 'Check the donation input.');
+      const booking = current.bookings.find(row => row.bookingId === data.bookingId);
+      if (!booking || booking.bookingStatus !== 'CHECKED_IN') return errorResponse(config, 409, 'DONATION_CONFLICT', 'Changed');
+      booking.bookingStatus = 'COMPLETED'; booking.hasDonation = true;
+      const donation = { donationId: String(current.donations.length + 501), bookingId: booking.bookingId,
+        donorAccountId: booking.donorAccountId, donorName: booking.donorName, slotId: booking.slotId,
+        startsAt: booking.startsAt, bookingStatus: 'COMPLETED', outcome: data.outcome,
+        releaseStatus: data.outcome === 'COLLECTED' ? 'PENDING' : 'NOT_REQUIRED',
+        collectedAt: data.collectedAt ?? null, collectionReference: data.collectionReference ?? null,
+        createdAt: `${booking.startsAt.slice(0, 10)}T10:30:00+05:30` };
+      current.donations.push(donation);
+      if (current.donationMode === 'malformed') donation.donationId = '0';
+      if (current.failDonationRefresh) { current.failDonationRefresh = false; current.donationReadFailure = true; }
+      return response(config, { success: true, donation }, 201);
+    }
+    if (/^\/admin\/donations\/[^/]+\/testing-decision$/u.test(config.url) && method === 'post') {
+      if (current.holdReleaseMutation) { current.holdReleaseMutation = false; await new Promise(resolve => { current.releaseReleaseMutation = resolve; }); }
+      if (current.releaseMode === 'conflict') return errorResponse(config, 409, 'RELEASE_CONFLICT', 'Changed');
+      if (current.releaseMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
+      const donation = current.donations.find(row => row.donationId === config.url.split('/')[3]);
+      if (!donation || donation.releaseStatus !== 'PENDING') return errorResponse(config, 409, 'RELEASE_CONFLICT', 'Changed');
+      donation.releaseStatus = data.decision;
+      let unit = null;
+      if (data.decision === 'APPROVED') {
+        const expiry = new Date(Date.parse(`${donation.collectedAt.slice(0, 10)}T00:00:00Z`) + 42 * 86400000).toISOString().slice(0, 10);
+        unit = { bloodUnitId: String(current.units.length + 17), donationId: donation.donationId,
+          bloodGroupId: data.confirmedBloodGroupId, bloodGroupCode: 'A-', expiryDate: expiry, unitStatus: 'AVAILABLE',
+          collectedAt: donation.collectedAt, outcome: donation.outcome, releaseStatus: 'APPROVED',
+          releaseDecidedAt: `${donation.collectedAt.slice(0, 10)}T12:00:00+05:30` };
+        current.units.push(unit);
+      }
+      const release = { donationId: donation.donationId, decision: data.decision,
+        reasonCode: data.decision === 'APPROVED' ? 'STAFF_RELEASE_APPROVED' : data.reasonCode,
+        releaseDecidedAt: `${donation.collectedAt.slice(0, 10)}T12:00:00+05:30`, unit, replayed: false };
+      if (current.releaseMode === 'malformed') release.unit = null;
+      if (current.failReleaseRefresh) { current.failReleaseRefresh = false; current.donationReadFailure = true; }
+      return response(config, { success: true, release });
+    }
+    if (config.url === '/inventory' && method === 'get') {
+      const page = Number(config.params?.page ?? 1);
+      const rows = current.units.map(unit => ({ ...unit, effectiveAvailability: unit.unitStatus === 'AVAILABLE' && unit.expiryDate > new Date().toISOString().slice(0, 10), expiryDue: unit.unitStatus === 'AVAILABLE' && unit.expiryDate <= new Date().toISOString().slice(0, 10) }));
+      return response(config, { success: true, units: structuredClone(rows.slice((page - 1) * 20, page * 20)),
+        pagination: { page, pageSize: 20, total: current.units.length } });
+    }
+    if (config.url === '/admin/inventory/expiry/run' && method === 'post') {
+      if (current.inventoryMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
+      if (current.inventoryMode === 'conflict') return errorResponse(config, 409, 'ALLOCATION_COORDINATION_REQUIRED', 'Allocated unit requires coordination.');
+      const due = current.units.filter(unit => unit.unitStatus === 'AVAILABLE' && unit.expiryDate <= new Date().toISOString().slice(0, 10));
+      due.forEach(unit => { unit.unitStatus = 'EXPIRED'; unit.expiryDate = unit.expiryDate; });
+      return response(config, { success: true, result: { runDate: new Date().toISOString().slice(0, 10), checkedCount: current.units.length,
+        expiredCount: due.length, runAt: '2026-10-29T10:00:00+05:30', operationId: '00000000-0000-4000-8000-000000000001' } });
+    }
+    if (/^\/admin\/inventory\/[^/]+\/discard$/u.test(config.url) && method === 'post') {
+      if (current.inventoryMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
+      if (current.inventoryMode === 'conflict') return errorResponse(config, 409, 'UNIT_STATUS_CONFLICT', 'Changed.');
+      const unit = current.units.find(row => row.bloodUnitId === config.url.split('/').at(-2));
+      if (!unit || unit.unitStatus !== 'AVAILABLE') return errorResponse(config, 409, 'UNIT_STATUS_CONFLICT', 'Changed.');
+      unit.unitStatus = 'DISCARDED';
+      return response(config, { success: true, discard: { bloodUnitId: unit.bloodUnitId, unitStatus: 'DISCARDED', reasonCode: data.reasonCode, discardedAt: '2026-10-29T10:00:00+05:30' } });
+    }
+    if (/^\/admin\/inventory\/[^/]+$/u.test(config.url) && method === 'get') {
+      const unit = current.units.find(row => row.bloodUnitId === config.url.split('/').at(-1));
+      return unit ? response(config, { success: true, unit: { ...unit, allocations: null } })
+        : errorResponse(config, 404, 'BLOOD_UNIT_NOT_FOUND', 'Missing');
+    }
+    if ((config.url === '/admin/donation-slots' && method === 'post')
+      || (config.url.startsWith('/admin/donation-slots/') && method === 'patch')
+      || (config.url.startsWith('/admin/bookings/') && config.url.endsWith('/status') && method === 'patch')
+      || (config.url.startsWith('/admin/donors/') && config.url.endsWith('/eligibility-decisions') && method === 'post')
+      || (config.url === '/donors/me/bookings' && method === 'post')
+      || (config.url.startsWith('/donors/me/bookings/') && method === 'post')) {
+      if (current.holdBookingMutation) { current.holdBookingMutation = false; await new Promise(resolve => { current.releaseBookingMutation = resolve; }); }
+      if (current.bookingMode === 'conflict') return errorResponse(config, 409, 'SLOT_CONFLICT', 'Changed');
+      if (current.bookingMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
+      if (current.bookingMode === 'validation') return errorResponse(config, 400, 'VALIDATION_ERROR', 'Check the entered values.');
+      let payload;
+      if (config.url === '/admin/donation-slots') {
+        const slot = { ...bookingSlots()[0], ...data, slotId: String(current.bookingSlots.length + 40) };
+        current.bookingSlots.push(slot); payload = { slot };
+      } else if (config.url.startsWith('/admin/donation-slots/')) {
+        const slot = current.bookingSlots.find(item => item.slotId === config.url.split('/').at(-1));
+        if (!slot) return errorResponse(config, 404, 'SLOT_NOT_FOUND', 'Missing');
+        Object.assign(slot, data.slotStatus === 'CANCELLED' ? { slotStatus: 'CANCELLED', occupied: 0, remaining: slot.capacity } : data.slotStatus === 'CLOSED' ? { slotStatus: 'CLOSED' } : data);
+        if (data.slotStatus === 'CANCELLED') current.bookings.filter(row => row.slotId === slot.slotId && row.bookingStatus === 'BOOKED')
+          .forEach(row => { row.bookingStatus = 'CANCELLED_BY_STAFF'; });
+        payload = { slot };
+      } else if (config.url.startsWith('/admin/bookings/') && config.url.endsWith('/status')) {
+        const id = config.url.split('/')[3]; const row = current.bookings.find(item => item.bookingId === id);
+        const allowed = { CHECKED_IN: 'STAFF_CHECKED_IN', CANCELLED_BY_STAFF: 'STAFF_CANCELLED', NO_SHOW: 'STAFF_NO_SHOW' };
+        if (!row || row.bookingStatus !== 'BOOKED' || allowed[data?.bookingStatus] !== data?.reason) {
+          return errorResponse(config, 409, 'BOOKING_CONFLICT', 'Changed');
+        }
+        row.bookingStatus = data.bookingStatus;
+        row.cancellationReason = data.bookingStatus === 'CANCELLED_BY_STAFF' ? data.reason : null;
+        payload = { booking: { bookingId: row.bookingId, donorAccountId: row.donorAccountId,
+          bookingStatus: current.bookingMode === 'malformed' ? 'BOOKED' : row.bookingStatus,
+          cancellationReason: row.cancellationReason, statusChangedAt: new Date().toISOString() } };
+      } else if (config.url.startsWith('/admin/donors/') && config.url.endsWith('/eligibility-decisions')) {
+        const row = current.bookings.find(item => item.bookingId === String(data?.bookingId));
+        if (!row || row.bookingStatus !== 'CHECKED_IN' || row.donorAccountId !== config.url.split('/')[3]) return errorResponse(config, 409, 'ELIGIBILITY_DECISION_CONFLICT', 'Changed');
+        row.latestDecision = data.decision; row.latestDeferredUntil = data.deferredUntil ?? null;
+        payload = { eligibilityDecision: { eligibilityDecisionId: '501', bookingId: row.bookingId, donorAccountId: row.donorAccountId,
+          decision: data.decision, reasonCode: ({ ACCEPTED: 'STAFF_ACCEPTED', TEMPORARILY_DEFERRED: 'STAFF_TEMPORARY_DEFERRAL', REVIEW_REQUIRED: 'STAFF_REVIEW_REQUIRED' })[data.decision], deferredUntil: data.deferredUntil ?? null } };
+        if (current.eligibilityDecisionMode === 'wrong-date') payload.eligibilityDecision.deferredUntil = '2099-12-31';
+        if (current.eligibilityDecisionMode === 'missing-date') delete payload.eligibilityDecision.deferredUntil;
+        if (current.eligibilityDecisionMode === 'invalid-id') payload.eligibilityDecision.eligibilityDecisionId = '0';
+      } else if (config.url === '/donors/me/bookings') {
+        const slot = current.bookingSlots.find(item => item.slotId === data.slotId);
+        if (!slot || slot.remaining < 1) return errorResponse(config, 409, 'SLOT_CONFLICT', 'Unavailable');
+        slot.occupied++; slot.remaining--;
+        const booking = { bookingId: String(current.bookings.length + 1), donorAccountId: current.user.accountId,
+          donorName: 'Fixture Donor', slotId: slot.slotId, bookingStatus: 'BOOKED', bookedAt: '2026-10-27T10:00:00+05:30',
+          statusChangedAt: '2026-10-27T10:00:00+05:30', cancellationReason: null,
+          startsAt: slot.startsAt, endsAt: slot.endsAt, slotStatus: slot.slotStatus, slot };
+        current.bookings.push(booking); payload = { booking };
+      } else {
+        const row = current.bookings.find(item => item.bookingId === config.url.split('/')[4]);
+        if (!row || row.bookingStatus !== 'BOOKED') return errorResponse(config, 409, 'BOOKING_CONFLICT', 'Changed');
+        row.bookingStatus = 'CANCELLED_BY_DONOR'; current.bookingSlots.find(slot => slot.slotId === row.slotId).remaining++;
+        payload = { booking: { bookingId: row.bookingId, bookingStatus: row.bookingStatus } };
+      }
+      if (current.bookingMode === 'malformed') payload = { booking: { bookingId: 'wrong' } };
+      if (current.failBookingRefresh) { current.failBookingRefresh = false; current.bookingReadFailure = true; }
+      return response(config, { success: true, ...payload }, config.url === '/admin/donation-slots' || config.url === '/donors/me/bookings'
+        || config.url.endsWith('/eligibility-decisions') ? 201 : 200);
     }
     if (config.url === '/admin/accounts' && method === 'get') {
       if (current.expireAccounts) return errorResponse(config, 401, 'ACCOUNT_UNAVAILABLE', 'Session no longer available.');
@@ -148,7 +376,7 @@ async function mount(path, options = {}) {
     }
     if (config.url === '/auth/logout') { current.user = null; return response(config, { success: true, message: 'You have been signed out.' }); }
     if (config.url === '/donors/me') return response(config, { success: true, profile: {
-      accountId: '321', email: 'donor@example.test', accountStatus: 'PENDING', fullName: 'Isolated Browser Donor',
+      accountId: '321', email: 'donor@example.test', accountStatus: current.user?.accountStatus ?? 'PENDING', fullName: 'Isolated Browser Donor',
       dateOfBirth: '1990-01-01', phone: '123', address: 'Browser address', area: null, reportedBloodGroup: null, confirmedBloodGroup: null,
     } });
     return errorResponse(config, 404, 'NOT_FOUND', 'Unexpected isolated test API request.');
@@ -178,7 +406,7 @@ async function submit() { container.querySelector('form').dispatchEvent(new Even
 function noOverflow() { assert(document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1, `No horizontal overflow at ${innerWidth}px`); }
 function labels() {
   for (const element of container.querySelectorAll('input,textarea,select')) {
-    assert(Boolean(element.id && container.querySelector(`label[for="${element.id}"]`)), `Accessible label for ${element.name}`);
+    assert(Boolean(element.labels?.length || (element.id && container.querySelector(`label[for="${element.id}"]`))), `Accessible label for ${element.name}`);
   }
 }
 async function run(name, work) {
@@ -187,10 +415,20 @@ async function run(name, work) {
 }
 
 async function scenarios() {
+  await runDonorDashboardScenarios({ mount, waitFor, assert, text, button, fill, submit, noOverflow, labels,
+    container, activeDonor, getFixture: () => fixture, run });
+  await runAdminDonorScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
+    container, adminUser, getFixture: () => fixture, run });
   await runAccountApprovalScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
     container, adminUser, hospitalUser, run });
   await runAccountStatusScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
     container, adminUser, hospitalUser, run });
+  await runBookingScenarios({ mount, waitFor, assert, text, button, fill, submit, pause, noOverflow, labels,
+    container, adminUser, activeDonor, run });
+  await runDonationScenarios({ mount, waitFor, assert, text, button, fill, pause, noOverflow, labels,
+    container, adminUser, activeDonor, run });
+  await runReleaseScenarios({ mount, waitFor, assert, text, button, fill, pause, noOverflow, labels,
+    container, adminUser, activeDonor, run });
   await run('ACTIVE Admin list, Mint styling, pagination, scoped navigation and approved data only', async () => {
     await mount('/admin/hospitals', { user: adminUser() });
     await waitFor(() => container.querySelectorAll('.mint-admin-table tbody tr').length === 20, 'first Admin page');

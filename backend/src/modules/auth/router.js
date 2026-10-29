@@ -7,6 +7,21 @@ import { createDonorProfileService } from '../donors/service.js';
 import { createAccountAdminRepository } from '../accounts/repository.js';
 import { createAccountAdminService } from '../accounts/service.js';
 import { createAccountAdminRouter } from '../accounts/router.js';
+import { createBookingRepository } from '../booking/repository.js';
+import { createBookingService } from '../booking/service.js';
+import { createBookingRouter } from '../booking/router.js';
+import { createDonationRepository } from '../donations/repository.js';
+import { createDonationService } from '../donations/service.js';
+import { createDonationRouter } from '../donations/router.js';
+import { createReleaseRepository } from '../release/repository.js';
+import { createReleaseService } from '../release/service.js';
+import { createReleaseRouter } from '../release/router.js';
+import { createAdminDonorRepository } from '../adminDonors/repository.js';
+import { createAdminDonorService } from '../adminDonors/service.js';
+import { createAdminDonorRouter } from '../adminDonors/router.js';
+import { createDonorActivityRepository } from '../donorDashboard/repository.js';
+import { createDonorActivityService } from '../donorDashboard/service.js';
+import { createDonorActivityRouter } from '../donorDashboard/router.js';
 import { validateDonorRegistration, validateHospitalRegistration, validateLogin } from './validation.js';
 import { requireCurrentAccount, requireRole } from '../../middleware/auth.js';
 import { requireTrustedOriginAndCsrf } from '../../middleware/csrf.js';
@@ -24,9 +39,23 @@ function unavailableRouter() {
   router.use((req, res, next) => {
     const supported = (req.method === 'GET' && ['/auth/csrf', '/auth/me', '/donors/me'].includes(req.path))
       || (req.method === 'GET' && req.path === '/admin/accounts')
+      || (req.method === 'GET' && ['/admin/donors', '/admin/donors/'].includes(req.path))
+      || (['GET', 'PATCH'].includes(req.method) && /^\/admin\/donors\/[^/]+$/u.test(req.path))
+      || (req.method === 'GET' && ['/donors/me/eligibility', '/donation-slots', '/donors/me/bookings', '/admin/bookings'].includes(req.path))
+      || (req.method === 'GET' && req.path === '/donors/me/reports/activity')
+      || (req.method === 'GET' && ['/admin/donations', '/donors/me/donations'].includes(req.path))
+      || (req.method === 'GET' && req.path === '/inventory')
+      || (req.method === 'GET' && /^\/admin\/inventory\/[^/]+$/u.test(req.path))
+      || (req.method === 'POST' && req.path === '/admin/inventory/expiry/run')
+      || (req.method === 'POST' && /^\/admin\/inventory\/[^/]+\/discard$/u.test(req.path))
+      || (req.method === 'POST' && /^\/admin\/donations\/[^/]+\/testing-decision$/u.test(req.path))
+      || (req.method === 'POST' && req.path === '/admin/donations')
+      || (req.method === 'POST' && ['/admin/donation-slots', '/donors/me/bookings'].includes(req.path))
+      || (req.method === 'PATCH' && /^\/admin\/donation-slots\/[^/]+$/u.test(req.path))
+      || (req.method === 'POST' && /^\/donors\/me\/bookings\/[^/]+\/cancellation$/u.test(req.path))
       || (req.method === 'PATCH' && /^\/admin\/accounts\/[^/]+$/u.test(req.path))
       || (req.method === 'PATCH' && req.path === '/donors/me')
-      || (req.method === 'POST' && ['/auth/register/donors', '/auth/register/hospitals', '/auth/login', '/auth/logout'].includes(req.path));
+      || (req.method === 'POST' && ['/auth/register/donors', '/auth/register/hospitals', '/auth/login', '/auth/logout', '/auth/password'].includes(req.path));
     if (!supported) return next();
     return next(new HttpError(
       503,
@@ -37,12 +66,13 @@ function unavailableRouter() {
   return router;
 }
 
-export function createAuthRouter({ authService, donorService, accountService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
+export function createAuthRouter({ authService, donorService, donorAdminService, activityService, accountService, bookingService, donationService, releaseService, sessionStore, frontendUrl = environment.frontendUrl, cookieSecure = false }) {
   const router = express.Router();
   const csrf = requireTrustedOriginAndCsrf(frontendUrl);
   const loginLimiter = createRateLimiter();
   const registrationLimiter = createRateLimiter();
   const hospitalRegistrationLimiter = createRateLimiter();
+  const passwordLimiter = createRateLimiter();
   const currentAccount = requireCurrentAccount(authService);
 
   router.get('/auth/csrf', (req, res, next) => {
@@ -98,6 +128,11 @@ export function createAuthRouter({ authService, donorService, accountService, se
   });
 
   if (accountService) router.use(createAccountAdminRouter({ authService, accountService, frontendUrl }));
+  if (bookingService) router.use(createBookingRouter({ authService, bookingService, frontendUrl }));
+  if (donationService) router.use(createDonationRouter({ authService, donationService, frontendUrl }));
+  if (releaseService) router.use(createReleaseRouter({ authService, releaseService, frontendUrl }));
+  if (donorAdminService) router.use(createAdminDonorRouter({ authService, donorService: donorAdminService, frontendUrl }));
+  if (activityService) router.use(createDonorActivityRouter({ authService, activityService }));
 
   router.get('/auth/me', currentAccount, (req, res) => {
     res.set('Cache-Control', 'no-store');
@@ -113,6 +148,19 @@ export function createAuthRouter({ authService, donorService, accountService, se
     } catch {
       next(new HttpError(503, 'SESSION_STORAGE_UNAVAILABLE', 'Session storage is unavailable.'));
     }
+  });
+
+  router.post('/auth/password', passwordLimiter, currentAccount, csrf, async (req, res, next) => {
+    try {
+      if (Object.keys(req.query).length) throw new HttpError(400, 'VALIDATION_ERROR', 'Unexpected query input.');
+      const result = await authService.changePassword(req.authAccount.accountId, req.body, req.authSession);
+      // The transaction has tombstoned every SID, including this one. Do not
+      // let Express save its loaded session during response finalization.
+      req.session = null;
+      res.clearCookie('bdcs.sid', { httpOnly: true, secure: cookieSecure, sameSite: 'lax', path: '/' });
+      res.set('Cache-Control', 'no-store');
+      res.json(result);
+    } catch (error) { next(error); }
   });
 
   router.use('/donors/me', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
@@ -146,12 +194,17 @@ export function createAuthRuntime({ databasePool = pool, env = process.env, fron
 
   const sessionStore = persistentSessions.store;
   const repository = createAuthRepository(databasePool);
-  const authService = createAuthService({ repository });
+  const authService = createAuthService({ repository, sessionStore });
   const donorService = createDonorProfileService({ repository: createDonorRepository(databasePool) });
+  const donorAdminService = createAdminDonorService({ repository: createAdminDonorRepository(databasePool) });
+  const activityService = createDonorActivityService({ repository: createDonorActivityRepository(databasePool) });
   const accountService = createAccountAdminService({ repository: createAccountAdminRepository(databasePool), sessionStore });
+  const bookingService = createBookingService({ repository: createBookingRepository(databasePool) });
+  const donationService = createDonationService({ repository: createDonationRepository(databasePool) });
+  const releaseService = createReleaseService({ repository: createReleaseRepository(databasePool) });
   return {
     middleware: persistentSessions.middleware,
-    router: createAuthRouter({ authService, donorService, accountService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
+    router: createAuthRouter({ authService, donorService, donorAdminService, activityService, accountService, bookingService, donationService, releaseService, sessionStore, frontendUrl, cookieSecure: sessionConfig.options.cookieSecure }),
     sessionStore,
   };
 }

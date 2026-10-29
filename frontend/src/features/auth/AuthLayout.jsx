@@ -36,13 +36,39 @@ export default function AuthLayout({ children, wide = false, theme = 'rose' }) {
           <nav className={`${prefix}-nav`} aria-label="Account navigation">
             {user ? <>
               {user.role === 'ADMIN' && user.accountStatus === 'ACTIVE'
-                ? <><Link to="/admin" aria-current={pathname === '/admin' ? 'page' : undefined}>Dashboard</Link><Link to="/admin/reports" aria-current={pathname.startsWith('/admin/reports') ? 'page' : undefined}>Reports</Link><Link to="/admin/hospitals" aria-current={pathname === '/admin/hospitals' ? 'page' : undefined}>Hospital management</Link><Link to="/admin/accounts" aria-current={pathname === '/admin/accounts' ? 'page' : undefined}>Account management</Link><Link to="/account/status" aria-current={pathname === '/account/status' ? 'page' : undefined}>Account status</Link><Link to="/admin/allocations" aria-current={pathname.startsWith('/admin/allocations') ? 'page' : undefined}>Request allocation</Link><Link to="/admin/compatibility" aria-current={pathname === '/admin/compatibility' ? 'page' : undefined}>Compatibility</Link><Link to="/admin/audit" aria-current={pathname === '/admin/audit' ? 'page' : undefined}>Audit log</Link></>
-                : user.role === 'HOSPITAL' ? <><Link to="/hospital" aria-current={pathname === '/hospital' ? 'page' : undefined}>Dashboard</Link><Link to="/hospital/profile" aria-current={pathname === '/hospital/profile' ? 'page' : undefined}>Hospital Profile</Link></> : user.role === 'DONOR'
-                ? <Link to="/donor/profile">My profile</Link>
-                : <Link to="/account/status">Account status</Link>}
-              {user.accountStatus === 'ACTIVE' && ['ADMIN', 'HOSPITAL'].includes(user.role) && <Link to={user.role === 'ADMIN' ? '/admin/requests' : '/hospital/requests'} aria-current={pathname.startsWith(user.role === 'ADMIN' ? '/admin/requests' : '/hospital/requests') ? 'page' : undefined}>Blood requests</Link>}
-          <button className={`${prefix}-link-button`} type="button" onClick={() => void signOut()} disabled={logoutBusy}>{logoutBusy ? 'Signing out…' : 'Sign out'}</button>
-            </> : <Link to="/login">Sign in</Link>}
+                ? <>
+                  <Link to="/admin" aria-current={pathname === '/admin' ? 'page' : undefined}>Dashboard</Link>
+                  <Link to="/admin/reports" aria-current={pathname.startsWith('/admin/reports') ? 'page' : undefined}>Reports</Link>
+                  <Link to="/admin/hospitals" aria-current={pathname === '/admin/hospitals' ? 'page' : undefined}>Hospital management</Link>
+                  <Link to="/admin/donors" aria-current={pathname.startsWith('/admin/donors') ? 'page' : undefined}>Donor management</Link>
+                  <Link to="/admin/accounts" aria-current={pathname === '/admin/accounts' ? 'page' : undefined}>Account management</Link>
+                  <Link to="/admin/donation-slots" aria-current={pathname === '/admin/donation-slots' ? 'page' : undefined}>Slots</Link>
+                  <Link to="/admin/bookings" aria-current={pathname === '/admin/bookings' ? 'page' : undefined}>Bookings</Link>
+                  <Link to="/admin/donations/process" aria-current={pathname === '/admin/donations/process' ? 'page' : undefined}>Donations</Link>
+                  <Link to="/admin/donations/testing" aria-current={pathname === '/admin/donations/testing' ? 'page' : undefined}>Release review</Link>
+                  <Link to="/admin/inventory" aria-current={pathname.startsWith('/admin/inventory') ? 'page' : undefined}>Inventory</Link>
+                  <Link to="/admin/requests" aria-current={pathname.startsWith('/admin/requests') ? 'page' : undefined}>Blood requests</Link>
+                  <Link to="/admin/allocations" aria-current={pathname.startsWith('/admin/allocations') ? 'page' : undefined}>Request allocation</Link>
+                  <Link to="/admin/compatibility" aria-current={pathname === '/admin/compatibility' ? 'page' : undefined}>Compatibility</Link>
+                  <Link to="/admin/audit" aria-current={pathname === '/admin/audit' ? 'page' : undefined}>Audit log</Link>
+                  <Link to="/account/status" aria-current={pathname === '/account/status' ? 'page' : undefined}>Account status</Link>
+                </>
+                : user.role === 'HOSPITAL' ? <>
+                  <Link to="/hospital" aria-current={pathname === '/hospital' ? 'page' : undefined}>Dashboard</Link>
+                  <Link to="/hospital/profile" aria-current={pathname === '/hospital/profile' ? 'page' : undefined}>Hospital Profile</Link>
+                  {user.accountStatus === 'ACTIVE' && <Link to="/hospital/requests" aria-current={pathname.startsWith('/hospital/requests') ? 'page' : undefined}>Blood requests</Link>}
+                </> : user.role === 'DONOR' ? <>
+                  <Link to="/donor/profile">My profile</Link>
+                  {user.accountStatus === 'ACTIVE' && <>
+                    <Link to="/donor" aria-current={pathname === '/donor' ? 'page' : undefined}>Dashboard</Link>
+                    <Link to="/donor/eligibility">Eligibility</Link>
+                    <Link to="/donor/slots">Slots</Link>
+                    <Link to="/donor/bookings">My bookings</Link>
+                    <Link to="/donor/donations" aria-current={pathname === '/donor/donations' ? 'page' : undefined}>Donation history</Link>
+                  </>}
+                </> : <Link to="/account/status">Account status</Link>}
+              <Link to="/account/settings" aria-current={pathname === '/account/settings' ? 'page' : undefined}>Password settings</Link>
+              <button className={`${prefix}-link-button`} type="button" onClick={() => void signOut()} disabled={logoutBusy}>{logoutBusy ? 'Signing outâ€¦' : 'Sign out'}</button>            </> : <Link to="/login">Sign in</Link>}
           </nav>
         </div>
       </header>

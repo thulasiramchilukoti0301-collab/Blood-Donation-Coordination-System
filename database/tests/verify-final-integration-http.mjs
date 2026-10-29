@@ -154,6 +154,60 @@ try {
   check(donorProfile.data.profile.fullName, 'Disposable Workflow Donor');
   check((await request('/donors/me', hospital)).response.status, 403);
 
+  // Create only the checked-in appointment prerequisite directly so this real
+  // HTTP workflow can run at any time of day without waiting for a future slot.
+  // All check-in, decision, donation, release, inventory and audit mutations
+  // below still pass through production services and MySQL transactions.
+  const [slotInsert] = await pool.execute(`INSERT INTO DonationSlot
+    (starts_at, ends_at, capacity, slot_status, created_by_account_id)
+    VALUES (DATE_SUB(NOW(), INTERVAL 30 MINUTE), DATE_ADD(NOW(), INTERVAL 30 MINUTE), 1, 'OPEN', ?)`, [adminId]);
+  const slotId = String(slotInsert.insertId);
+  const [bookingInsert] = await pool.execute(`INSERT INTO Booking
+    (donor_account_id, slot_id, booking_status) VALUES (?, ?, 'BOOKED')`, [donorId, slotId]);
+  const bookingId = String(bookingInsert.insertId);
+  const checkin = await mutate(`/admin/bookings/${bookingId}/status`, admin, 'PATCH', {
+    bookingStatus: 'CHECKED_IN', reason: 'STAFF_CHECKED_IN',
+  });
+  check(checkin.response.status, 200, 'Admin check-in updates the real Booking row.');
+  check(checkin.data.booking.bookingStatus, 'CHECKED_IN');
+  const dayOfDecision = await mutate(`/admin/donors/${donorId}/eligibility-decisions`, admin, 'POST', {
+    bookingId, decision: 'ACCEPTED',
+  });
+  check(dayOfDecision.response.status, 201, 'Admin records the same-visit eligibility decision.');
+  check(dayOfDecision.data.eligibilityDecision.decision, 'ACCEPTED');
+  const [[collectionClock]] = await pool.query("SELECT DATE_FORMAT(NOW(), '%Y-%m-%dT%H:%i:%s+05:30') AS collectedAt");
+  const donationResult = await mutate('/admin/donations', admin, 'POST', {
+    bookingId, outcome: 'COLLECTED', collectedAt: collectionClock.collectedAt,
+    collectionReference: 'DISPOSABLE-RELEASE-E2E-001',
+  });
+  check(donationResult.response.status, 201, 'Donation processing completes the checked-in Booking atomically.');
+  const donationId = donationResult.data.donation.donationId;
+  check(donationResult.data.donation.outcome, 'COLLECTED');
+  check(donationResult.data.donation.bookingStatus, 'COMPLETED');
+  const [[savedDonation]] = await pool.execute(`SELECT d.outcome, d.release_status AS releaseStatus,
+    b.booking_status AS bookingStatus FROM Donation d JOIN Booking b USING (booking_id) WHERE d.donation_id = ?`, [donationId]);
+  check([savedDonation.outcome, savedDonation.releaseStatus, savedDonation.bookingStatus],
+    ['COLLECTED', 'PENDING', 'COMPLETED'], 'Donation, release status and completed visit persist together.');
+  const release = await mutate(`/admin/donations/${donationId}/testing-decision`, admin, 'POST', {
+    decision: 'APPROVED', confirmedBloodGroupId: '3',
+  });
+  check(release.response.status, 200, 'Testing/release approval uses the real transactional service.');
+  const bloodUnitId = release.data.release.unit.bloodUnitId;
+  check(release.data.release.unit.unitStatus, 'AVAILABLE');
+  const [[savedUnit]] = await pool.execute(`SELECT blood_group_id AS groupId, unit_status AS unitStatus,
+    expiry_date AS expiryDate FROM BloodUnit WHERE blood_unit_id = ?`, [bloodUnitId]);
+  check([Number(savedUnit.groupId), savedUnit.unitStatus], [3, 'AVAILABLE'], 'Approved collection creates one compatible-group AVAILABLE unit.');
+  const [[releaseAudit]] = await pool.execute(`SELECT COUNT(*) AS total, COUNT(DISTINCT operation_id) AS operations,
+    SUM(action_code = 'DONATION_RELEASE_DECIDED' AND subject_type = 'Donation' AND subject_id = ?) AS decisionEvents,
+    SUM(action_code = 'BLOOD_UNIT_CREATED' AND subject_type = 'BloodUnit' AND subject_id = ?) AS unitEvents
+    FROM AuditEvent WHERE action_code IN ('DONATION_RELEASE_DECIDED', 'BLOOD_UNIT_CREATED')
+      AND subject_id IN (?, ?)`, [donationId, bloodUnitId, donationId, bloodUnitId]);
+  check([Number(releaseAudit.total), Number(releaseAudit.operations), Number(releaseAudit.decisionEvents), Number(releaseAudit.unitEvents)],
+    [2, 1, 1, 1], 'Release and BloodUnit creation audit rows share one operation and exact subjects.');
+  const inventory = await request('/inventory?unitStatus=AVAILABLE', admin);
+  check(inventory.response.status, 200);
+  check(inventory.data.units.some(unit => unit.bloodUnitId === bloodUnitId), true, 'Admin inventory reads the new persisted unit.');
+
   const neededBy = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
   const requestBody = { recipientGroupId: '4', quantityRequested: 3, priority: 'URGENT', neededBy, note: 'Disposable test request' };
   const missingCsrf = await request('/hospitals/me/requests', { cookie: hospital.cookie, method: 'POST', body: requestBody });
@@ -236,11 +290,14 @@ try {
   check(hospitalDashboard.data.recent[0].status, 'CANCELLED');
   const inventoryReport = await request('/admin/reports/inventory', admin);
   check(inventoryReport.response.status, 200);
-  check(inventoryReport.data.inventory, [], 'Real inventory report reflects the empty BloodUnit table.');
+  check(inventoryReport.data.inventory.length, 1, 'Real inventory report includes the released BloodUnit.');
+  check(inventoryReport.data.inventory[0], { bloodGroup: 'A-', status: 'AVAILABLE', total: '1' });
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const donationReport = await request(`/admin/reports/donations?from=${today}&to=${today}&interval=DAY`, admin);
   check(donationReport.response.status, 200);
-  check(donationReport.data.donations, []);
+  check(donationReport.data.donations.length, 1);
+  check(donationReport.data.donations[0].outcome, 'COLLECTED');
+  check(donationReport.data.donations[0].total, '1');
   const requestReport = await request(`/admin/reports/requests?from=${today}&to=${today}&interval=DAY`, admin);
   check(requestReport.response.status, 200, `Request report API response: ${JSON.stringify(requestReport.data)}`);
   check(requestReport.data.statuses.length, 1);
@@ -270,8 +327,8 @@ try {
   const [[approvedEvents]] = await pool.execute(`SELECT COUNT(*) AS total FROM AuditEvent
     WHERE action_code = 'ACCOUNT_APPROVED' AND subject_type = 'Account' AND subject_id IN (?,?)`, [hospitalId, donorId]);
   check(Number(approvedEvents.total), 2, 'Admin approvals are also persisted audit events.');
-  console.log(`Disposable real HTTP/MySQL integration passed: ${checks} assertions; Hospital/Donor registration and approval, login/profile, request create/review/cancel, trigger history, audit log, dashboards/reports, persistence, CSRF and rollback.`);
-  console.log('The disposable schema intentionally omitted migration 009; an empty test-only Allocation view exercised only pre-allocation Hospital cancellation. No allocation lifecycle was tested or enabled.');
+  console.log(`Disposable real HTTP/MySQL integration passed: ${checks} assertions; registration/approval, real booking check-in and eligibility decision, donation processing, release approval, AVAILABLE BloodUnit and shared audit operation, request create/review/cancel/history, dashboards/reports, persistence, CSRF and rollback.`);
+  console.log('Migration 009 was intentionally omitted; a test-only empty Allocation view enabled cancellation prechecks. Allocation preview against the real schema and allocation mutation/concurrency were not tested or enabled.');
 } finally {
   if (server) {
     server.closeAllConnections();

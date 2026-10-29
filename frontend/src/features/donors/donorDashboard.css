@@ -1,0 +1,3 @@
+.donor-dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: 1rem; }
+.donor-dashboard-grid .rose-card { min-width: 0; overflow-wrap: anywhere; }
+.donor-dashboard-grid nav { display: flex; flex-wrap: wrap; gap: .7rem; }
