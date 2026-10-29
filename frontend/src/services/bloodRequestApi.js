@@ -86,5 +86,23 @@ export function createBloodRequestApi(client, { creationEnabled = false } = {}) 
       if (status !== 201 || data?.success !== true || data.requestStatus !== 'SUBMITTED' || data.outstandingQuantity !== body.quantityRequested) throw invalid();
       return { requestId: requestId(data.requestId), requestStatus: data.requestStatus, outstandingQuantity: data.outstandingQuantity };
     },
+    async cancel(id, { signal } = {}) {
+      requestId(id);
+      const { data: token } = await client.get('/auth/csrf', { signal });
+      if (token?.success !== true || !/^[a-f0-9]{64}$/u.test(token.csrfToken)) throw invalid();
+      const { status, data } = await client.post(`${base(false)}/${encodeURIComponent(id)}/cancellation`, {},
+        { signal, headers: { 'X-CSRF-Token': token.csrfToken } });
+      if (status !== 200 || data?.success !== true || data.requestId !== id || data.requestStatus !== 'CANCELLED') throw invalid();
+      return { requestId: id, requestStatus: 'CANCELLED' };
+    },
+    async startReview(id, { signal } = {}) {
+      requestId(id);
+      const { data: token } = await client.get('/auth/csrf', { signal });
+      if (token?.success !== true || !/^[a-f0-9]{64}$/u.test(token.csrfToken)) throw invalid();
+      const { status, data } = await client.post(`${base(true)}/${encodeURIComponent(id)}/review`, { decision: 'UNDER_REVIEW' },
+        { signal, headers: { 'X-CSRF-Token': token.csrfToken } });
+      if (status !== 200 || data?.success !== true || data.requestId !== id || data.requestStatus !== 'UNDER_REVIEW') throw invalid();
+      return { requestId: id, requestStatus: 'UNDER_REVIEW' };
+    },
   };
 }

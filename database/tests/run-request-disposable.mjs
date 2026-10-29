@@ -12,7 +12,11 @@ import { mysqlStatements } from './helpers/mysql-script.mjs';
 if (process.argv[2] !== '--allow-fresh-disposable') throw new Error('Explicit fresh disposable authorization required.');
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const mysql = createRequire(resolve(root, 'backend/package.json'))('mysql2/promise');
-const base = 'C:/Program Files/MySQL/MySQL Server 8.0';
+const base = process.argv.find((arg) => arg.startsWith('--mysql-basedir='))?.slice('--mysql-basedir='.length)
+  ?? 'C:/Program Files/MySQL/MySQL Server 8.0';
+if (!/^C:[\\/]Program Files[\\/]MySQL[\\/]MySQL Server (?:8\.0|9\.1)$/iu.test(base)) {
+  throw new Error('Only an installed MySQL 8.0 or 9.1 server base directory is supported.');
+}
 const label = `feature7_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
 const directory = resolve(root, '.tmp', `requests-mysql-${label}`);
 const data = resolve(directory, 'data');

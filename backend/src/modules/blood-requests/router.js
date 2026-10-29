@@ -49,5 +49,23 @@ export function createBloodRequestRouter({ authService, service, frontendUrl, re
       return service.createHospitalRequest(principal(req), req.body);
     }, 201));
   }
+  if (readiness.cancellationApproved === true) {
+    router.post('/hospitals/me/requests/:requestId/cancellation', ...guard('HOSPITAL'), requireTrustedOriginAndCsrf(frontendUrl), handler(async (req) => {
+      noQuery(req);
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length) throw requestValidationError();
+      const id = validateRequestId(req.params.requestId);
+      return service.cancelHospitalRequest(principal(req), id);
+    }));
+  }
+  if (readiness.reviewApproved === true) {
+    router.post('/admin/requests/:requestId/review', ...guard('ADMIN'), requireTrustedOriginAndCsrf(frontendUrl), handler(async (req) => {
+      noQuery(req);
+      if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)
+        || Object.keys(req.body).length !== 1 || !Object.hasOwn(req.body, 'decision')
+        || req.body.decision !== 'UNDER_REVIEW') throw requestValidationError();
+      const id = validateRequestId(req.params.requestId);
+      return service.reviewRequest(principal(req), id, { decision: req.body.decision });
+    }));
+  }
   return router;
 }

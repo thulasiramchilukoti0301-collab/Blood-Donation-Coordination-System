@@ -125,8 +125,16 @@ export function createBloodRequestRepository(database, { contextAdapter = null }
       await contextAdapter.set(database, context);
     },
     async lockRequest(requestId) {
-      return findRequest(`SELECT CAST(request_id AS CHAR) AS requestId, request_status AS requestStatus
+      return findRequest(`SELECT CAST(request_id AS CHAR) AS requestId,
+        CAST(hospital_account_id AS CHAR) AS hospitalAccountId, request_status AS requestStatus
         FROM HospitalRequest WHERE request_id = ? FOR UPDATE`, [requestId]);
+    },
+    async countActiveAllocations(requestId) {
+      const [[row]] = await execute(`SELECT COUNT(*) AS total FROM Allocation
+        WHERE request_id = ? AND allocation_status IN ('ALLOCATED','ISSUED')`, [requestId]);
+      const total = Number(row?.total);
+      if (!Number.isSafeInteger(total) || total < 0) throw new HttpError(503, 'REQUEST_FEATURE_NOT_READY', 'Request cancellation is temporarily unavailable.');
+      return total;
     },
     async updateStatus(requestId, oldStatus, newStatus, reasonCode) {
       const [result] = await execute(`UPDATE HospitalRequest SET request_status = ?, rejection_reason_code = ?,

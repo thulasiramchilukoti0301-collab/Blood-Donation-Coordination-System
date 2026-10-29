@@ -23,16 +23,30 @@ export default function RequestList({ admin = false, client = bloodRequests, ava
   const [query, setQuery] = useState({ page: 1 });
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
+  const [revision, setRevision] = useState(0);
+  const [reviewing, setReviewing] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
   const detailHeading = useRef(null);
   const opener = useRef(null);
   useEffect(() => { if (selected) detailHeading.current?.focus(); }, [selected]);
-  const key = JSON.stringify([admin, query]);
+  const key = JSON.stringify([admin, query, revision]);
   const resource = useRequestResource(key, availability.reads === true, (signal) => client.list(query, { admin, signal }));
   const detailKey = JSON.stringify([key, selected]);
   const detail = useRequestResource(detailKey, availability.reads === true && !!selected, (signal) => client.detail(selected, { admin, signal }));
   const data = resource.state === 'ready' ? resource.data : null;
   const pages = data ? Math.max(1, Math.ceil(data.pagination.total / 20)) : 1;
   const changePage = (page) => { setSelected(null); setQuery((old) => ({ ...old, page })); };
+  async function startReview() {
+    setReviewing(true); setActionError(''); setActionMessage('');
+    try {
+      await client.startReview(selected);
+      setActionMessage('Request moved to Under Review. The recorded history has been refreshed.');
+      setRevision((value) => value + 1);
+    } catch (failure) {
+      setActionError(failure?.response?.data?.error?.message || failure.message || 'The request could not be moved to review. Refresh its status before trying again.');
+    } finally { setReviewing(false); }
+  }
   return <RequestLayout admin={admin} title={admin ? 'Blood request management' : 'My blood requests'} number={admin ? '25' : '13'} description={admin ? 'Review hospital demand in priority order and open saved request details.' : 'Follow your hospital’s requests, from submission through their recorded status.'}>
     <div className="sky-workspace-note"><span className="sky-note-dot" aria-hidden="true" /><p>{admin ? 'Queue order: emergency → urgent → normal, then earliest needed-by and oldest submission.' : 'Your hospital’s requests only. Most recent submissions appear first.'}</p><span>20 per page</span></div>
     <Filters admin={admin} draft={draft} setDraft={setDraft} disabled={!availability.reads} error={error} onSubmit={(event) => {
@@ -46,7 +60,12 @@ export default function RequestList({ admin = false, client = bloodRequests, ava
         : <div className="sky-empty"><span aria-hidden="true">↗</span><h3>No requests {query.page > 1 ? 'on this page' : 'found'}</h3><p>{data.pagination.total ? 'Return to an earlier page to view matching requests.' : 'Saved requests matching your filters will appear here.'}</p>{query.page > 1 && <button className="sky-button sky-button-secondary" onClick={() => changePage(1)}>Go to first page</button>}</div>}
       <nav className="sky-pagination" aria-label="Blood request pages"><span>Page {query.page} of {pages} · 20 rows per page</span><div className="sky-actions"><button className="sky-button sky-button-secondary" disabled={query.page <= 1} onClick={() => changePage(query.page - 1)}>Previous</button><button className="sky-button sky-button-secondary" disabled={query.page >= pages} onClick={() => changePage(query.page + 1)}>Next</button></div></nav>
     </section>}
-    {admin && selected && <section className="sky-card" id="request-selected-detail" aria-label="Selected request details"><div className="sky-section-title"><h2 ref={detailHeading} tabIndex={-1}>Request #{selected}</h2><button type="button" className="sky-button sky-button-secondary" onClick={() => { setSelected(null); opener.current?.focus(); }}>Close details</button></div><ResourceFeedback resource={detail} />{detail.state === 'ready' && <RequestOverview request={detail.data} />}</section>}
-    <p className="sky-footnote">{admin ? 'Review, priority changes, allocation and issue actions are not available in this workspace yet.' : 'Fulfillment values appear only when supplied by the operational request service.'}</p>
+    {admin && selected && <section className="sky-card" id="request-selected-detail" aria-label="Selected request details">
+      <div className="sky-section-title"><h2 ref={detailHeading} tabIndex={-1}>Request #{selected}</h2><button type="button" className="sky-button sky-button-secondary" onClick={() => { setSelected(null); opener.current?.focus(); }}>Close details</button></div>
+      <ResourceFeedback resource={detail} />
+      {detail.state === 'ready' && <><RequestOverview request={detail.data} />{detail.data.requestStatus === 'SUBMITTED' && <section className="sky-actions" aria-label="Admin request actions"><button type="button" className="sky-button" disabled={reviewing} onClick={startReview}>{reviewing ? 'Starting review…' : 'Start review'}</button><p className="sky-muted">This records the approved SUBMITTED to UNDER_REVIEW transition.</p></section>}</>}
+      {actionError && <p role="alert" className="sky-error">{actionError}</p>}{actionMessage && <p role="status" className="sky-success">{actionMessage}</p>}
+    </section>}
+    <p className="sky-footnote">{admin ? 'Priority changes, allocation confirmation and issue actions remain unavailable.' : 'Fulfillment values appear only when supplied by the operational request service.'}</p>
   </RequestLayout>;
 }

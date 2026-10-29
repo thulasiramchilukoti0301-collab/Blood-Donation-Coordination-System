@@ -1,5 +1,9 @@
 # Feature 9 — Audit and operational tracking
 
+## Current mutation coverage update — 2026-10-29
+
+The current request runtime also mounts the bounded cancellation/review operations recorded in [the Feature 7 route update](feature7-activation.md#current-route-update--2026-10-29). They emit the already registered `HOSPITAL_REQUEST_CANCELLED` and `HOSPITAL_REQUEST_STATUS_CHANGED` actions in the same transactions as the request status updates. Allocation writes still have no approved action or mounted writer. The development database currently has zero AuditEvent and RequestStatusHistory rows, so live persisted event display remains unverified.
+
 ## Delivered read-only scope
 
 Feature 9 adds the ACTIVE Admin endpoint `GET /api/admin/audit-events` and screen `/admin/audit`. Both reuse the stored-session current-account guard. The API validates query fields strictly, returns `Cache-Control: no-store`, uses parameterized SQL, and returns a bounded page of safe AuditEvent projections. It reads the existing `AuditEvent` table and checks its primary, actor and subject indexes; no migration, fixture or write path is added.

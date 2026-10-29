@@ -65,6 +65,27 @@ test('creation defaults closed and opt-in adapter gets CSRF then accepts only co
   assert.equal(calls[1][2].headers['X-CSRF-Token'], 'a'.repeat(64));
   for (const status of [200, 503]) await assert.rejects(createBloodRequestApi({ ...transport, post: async () => ({ status, data: {} }) }, { creationEnabled: true }).create(body));
 });
+test('cancellation and start-review clients use fresh CSRF and fixed documented operations', async () => {
+  const calls = [];
+  const client = createBloodRequestApi({
+    get: async (...args) => { calls.push(args); return { data: { success: true, csrfToken: 'b'.repeat(64) } }; },
+    post: async (...args) => {
+      calls.push(args);
+      return args[0].includes('/cancellation')
+        ? { status: 200, data: { success: true, requestId: '90', requestStatus: 'CANCELLED' } }
+        : { status: 200, data: { success: true, requestId: '90', requestStatus: 'UNDER_REVIEW' } };
+    },
+  });
+  assert.deepEqual(await client.cancel('90'), { requestId: '90', requestStatus: 'CANCELLED' });
+  assert.deepEqual(await client.startReview('90'), { requestId: '90', requestStatus: 'UNDER_REVIEW' });
+  assert.equal(calls[0][0], '/auth/csrf');
+  assert.equal(calls[1][0], '/hospitals/me/requests/90/cancellation');
+  assert.deepEqual(calls[1][1], {});
+  assert.equal(calls[1][2].headers['X-CSRF-Token'], 'b'.repeat(64));
+  assert.equal(calls[3][0], '/admin/requests/90/review');
+  assert.deepEqual(calls[3][1], { decision: 'UNDER_REVIEW' });
+  await assert.rejects(client.cancel('01'));
+});
 test('API error presentation is safe and distinguishes unavailable, missing and denied', () => {
   const error = (status, code) => ({ response: { status, data: { error: { code, message: 'PRIVATE SQL details' } } } });
   assert.equal(requestFailure(error(404, 'NOT_FOUND')).state, 'unavailable');

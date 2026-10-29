@@ -61,6 +61,10 @@ async function mount(path, options = {}) {
     if (f.failures-- > 0) return fail(503, 'DATABASE_UNAVAILABLE');
     if (config.method === 'post') {
       if (f.uncertain) throw new Error('Transport uncertainty');
+      if (config.url.endsWith('/cancellation')) {
+        f.cancelled = true;
+        return respond({ success: true, requestId: '90', requestStatus: 'CANCELLED' });
+      }
       return respond({ success: true, requestId: '111', requestStatus: 'SUBMITTED', outstandingQuantity: 3 }, 201);
     }
     if (config.url.endsWith('/requests')) {
@@ -72,7 +76,7 @@ async function mount(path, options = {}) {
     }
     const id = config.url.split('/').at(-1);
     if (f.missing) return fail(404, 'REQUEST_NOT_FOUND');
-    return respond({ success: true, request: { ...f.rows[0], requestId: id, requestStatus: 'UNDER_REVIEW', note: 'Isolated operational note',
+    return respond({ success: true, request: { ...f.rows[0], requestId: id, requestStatus: f.cancelled ? 'CANCELLED' : 'UNDER_REVIEW', note: 'Isolated operational note',
       requestStatusHistory: config.url.startsWith('/admin/requests/')
         ? [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27T10:00:00+05:30', actorAccountId: '12', reasonCode: null }, { oldStatus: 'SUBMITTED', newStatus: 'UNDER_REVIEW', changedAt: '2026-10-27T11:00:00+05:30', actorAccountId: '31', reasonCode: 'REVIEW_STARTED' }]
         : [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27T10:00:00+05:30' }, { oldStatus: 'SUBMITTED', newStatus: 'UNDER_REVIEW', changedAt: '2026-10-27T11:00:00+05:30' }] } });
@@ -158,16 +162,24 @@ async function scenarios() {
     assert(!content().includes('SECRET_FIXTURE'), 'Expired request data hidden');
   });
   await scenario('detail uses only genuine history and no invented totals', async () => {
-    await mount('/hospital/requests/90', { custom: true });
+    const f = await mount('/hospital/requests/90', { custom: true });
     await until(() => content().includes('Isolated operational note'), 'detail ready');
     assert(container.querySelectorAll('.sky-history li').length === 2, 'Only supplied history entries rendered');
     assert(container.querySelector('[aria-current="step"]')?.textContent === 'under review', 'Current stage follows actual status');
     assert(container.querySelectorAll('.sky-totals dd').length === 3 && [...container.querySelectorAll('.sky-totals dd')].every((el) => el.textContent === 'Not available'), 'Missing totals never become zeros');
-    assert(content().includes('Cancellation is unavailable'), 'Cancellation stays unavailable'); layoutChecks();
+    assert(button('Cancel request'), 'Hospital cancellation is available for this eligible request');
+    await click('Cancel request');
+    assert(content().includes('Cancel request #90?'), 'Cancellation requires explicit confirmation');
+    await click('Keep request');
+    assert(button('Cancel request'), 'Keeping the request closes the confirmation without mutation');
+    await click('Cancel request'); await click('Confirm cancellation');
+    await until(() => content().includes('Request cancelled.') && content().includes('cancelled'), 'confirmed cancellation and refreshed status');
+    assert(f.calls.some((call) => call.method === 'post' && call.url.endsWith('/requests/90/cancellation')), 'Cancellation uses its real API client');
+    layoutChecks();
     await mount('/hospital/requests/90', { custom: true, missing: true }); await until(() => content().includes('Request not found'), 'ownership-safe not-found');
-    const f = await mount('/hospital/requests/01', { custom: true });
+    const invalidRequestFixture = await mount('/hospital/requests/01', { custom: true });
     assert(content().includes('Invalid request'), 'Malformed request ID rejected locally');
-    assert(!f.calls.some((call) => call.url.includes('/requests/')), 'Invalid ID never sent to API');
+    assert(!invalidRequestFixture.calls.some((call) => call.url.includes('/requests/')), 'Invalid ID never sent to API');
   });
   await scenario('Admin priority queue and accessible inline detail', async () => {
     await mount('/admin/requests', { custom: true, user: user('ADMIN') });

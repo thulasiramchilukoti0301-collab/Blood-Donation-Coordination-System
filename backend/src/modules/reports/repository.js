@@ -46,11 +46,11 @@ export function createReportsRepository(database) {
     },
     async requestReport(filters) {
       const conditions = ['1 = 1']; const values = [];
-      if (filters.from) { conditions.push('created_at >= ?'); values.push(`${filters.from} 00:00:00`); }
-      if (filters.to) { conditions.push('created_at < DATE_ADD(?, INTERVAL 1 DAY)'); values.push(`${filters.to} 00:00:00`); }
+      if (filters.from) { conditions.push('r.created_at >= ?'); values.push(`${filters.from} 00:00:00`); }
+      if (filters.to) { conditions.push('r.created_at < DATE_ADD(?, INTERVAL 1 DAY)'); values.push(`${filters.to} 00:00:00`); }
       const [statuses, trend, hospitals] = await Promise.all([
-        rows(`SELECT request_status AS status, COUNT(*) AS total, COALESCE(SUM(quantity_requested), 0) AS quantity FROM HospitalRequest WHERE ${conditions.join(' AND ')} GROUP BY request_status ORDER BY request_status`, values),
-        rows(`SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS period, COUNT(*) AS total FROM HospitalRequest WHERE ${conditions.join(' AND ')} GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d') ORDER BY period`, values),
+        rows(`SELECT r.request_status AS status, COUNT(*) AS total, COALESCE(SUM(r.quantity_requested), 0) AS quantity FROM HospitalRequest r WHERE ${conditions.join(' AND ')} GROUP BY r.request_status ORDER BY r.request_status`, values),
+        rows(`SELECT DATE_FORMAT(r.created_at, '%Y-%m-%d') AS period, COUNT(*) AS total FROM HospitalRequest r WHERE ${conditions.join(' AND ')} GROUP BY DATE_FORMAT(r.created_at, '%Y-%m-%d') ORDER BY period`, values),
         rows(`SELECT CAST(r.hospital_account_id AS CHAR) AS hospitalAccountId, h.organization_name AS hospital, r.request_status AS status, COUNT(*) AS total, COALESCE(SUM(r.quantity_requested), 0) AS quantity
           FROM HospitalRequest r JOIN Hospital h ON h.account_id = r.hospital_account_id WHERE ${conditions.join(' AND ')}
           GROUP BY r.hospital_account_id, h.organization_name, r.request_status ORDER BY h.organization_name, r.hospital_account_id, r.request_status` , values),

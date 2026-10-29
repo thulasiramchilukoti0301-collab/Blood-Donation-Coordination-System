@@ -16,7 +16,7 @@ import { sessionAuthorization } from '../src/modules/accounts/sessionAuthorizati
 import { HttpError } from '../src/utils/httpError.js';
 import { hospitalDatabase, testPassword } from './helpers/hospital-database.mjs';
 
-async function start(t, { readiness = { storageInstalled: true, readProjectionApproved: true, creationContractsApproved: true }, fail = false } = {}) {
+async function start(t, { readiness = { storageInstalled: true, readProjectionApproved: true, creationContractsApproved: true, cancellationApproved: true, reviewApproved: true }, fail = false } = {}) {
   const database = hospitalDatabase();
   const calls = [];
   const service = {
@@ -25,6 +25,8 @@ async function start(t, { readiness = { storageInstalled: true, readProjectionAp
     async getHospitalRequest(actor, id) { calls.push({ actor, id }); throw new HttpError(404, 'REQUEST_NOT_FOUND', 'The blood request was not found.'); },
     async getAdminRequestRecord(actor, id) { return this.getHospitalRequest(actor, id); },
     async createHospitalRequest(actor, body) { calls.push({ actor, body }); return { requestId: '91', requestStatus: 'SUBMITTED', outstandingQuantity: body.quantityRequested }; },
+    async cancelHospitalRequest(actor, id) { calls.push({ actor, cancellationId: id }); return { requestId: id, requestStatus: 'CANCELLED' }; },
+    async reviewRequest(actor, id, input) { calls.push({ actor, reviewId: id, input }); return { requestId: id, requestStatus: 'UNDER_REVIEW' }; },
   };
   const router = createBloodRequestRouter({ service, readiness, frontendUrl: environment.frontendUrl,
     authService: createAuthService({ repository: createAuthRepository(database) }) });
@@ -99,6 +101,22 @@ test('create adapter validates exact body and Origin/CSRF before passing trusted
   assert.equal(calls.length, 1);
   assert.equal(calls[0].actor.accountId, '9007199254740993');
 });
+test('approved cancellation and review adapters require CSRF and pass only fixed scoped operations', async (t) => {
+  const { request, login, calls } = await start(t);
+  const hospital = await login();
+  await error(await request('/hospitals/me/requests/90/cancellation', { cookie: hospital.cookie, method: 'POST', body: {} }), 403, 'CSRF_TOKEN_INVALID');
+  await error(await request('/hospitals/me/requests/90/cancellation', { ...hospital, method: 'POST', body: { accountId: '31' } }), 400, 'VALIDATION_ERROR');
+  const cancelled = await request('/hospitals/me/requests/90/cancellation', { ...hospital, method: 'POST', body: {} });
+  assert.equal(cancelled.status, 200);
+  assert.deepEqual(await cancelled.json(), { success: true, requestId: '90', requestStatus: 'CANCELLED' });
+  const admin = await login('31');
+  await error(await request('/admin/requests/90/review', { ...admin, method: 'POST', body: { decision: 'AWAITING_INVENTORY' } }), 400, 'VALIDATION_ERROR');
+  const reviewed = await request('/admin/requests/90/review', { ...admin, method: 'POST', body: { decision: 'UNDER_REVIEW' } });
+  assert.equal(reviewed.status, 200);
+  assert.deepEqual(await reviewed.json(), { success: true, requestId: '90', requestStatus: 'UNDER_REVIEW' });
+  assert.equal(calls.find((call) => call.cancellationId)?.actor.accountId, '9007199254740993');
+  assert.deepEqual(calls.find((call) => call.reviewId)?.input, { decision: 'UNDER_REVIEW' });
+});
 test('driver errors are safe and default readiness leaves every request route unregistered', async (t) => {
   const broken = await start(t, { fail: true });
   await error(await broken.request('/hospitals/me/requests', await broken.login()), 503, 'DATABASE_UNAVAILABLE');
@@ -130,7 +148,7 @@ function transactionFixture(fail = '') {
     release() { calls.push({ sql: 'release' }); }, destroy() { calls.push({ sql: 'destroy' }); },
   };
   const repository = createBloodRequestRepository({ execute: async () => { throw new Error('Escaped connection'); }, getConnection: async () => connection },
-    { contextAdapter: createRequestContextAdapter({ enabled: true, reasonCodes: ['TEST_REASON'] }) });
+    { contextAdapter: createRequestContextAdapter({ enabled: true, reasonCodes: ['REQUEST_REJECTED'] }) });
   return { repository, calls, connection };
 }
 test('candidate context is opt-in, parameterized and has no system-actor bypass', async () => {
@@ -162,8 +180,8 @@ test('internal review locks Account/session/request then uses trigger context an
     const { repository, calls } = transactionFixture(fail);
     const service = createBloodRequestService({ repository,
       auditWriter: createAuditWriter({ allowedActionCodes: ['TEST_REQUEST_STATUS'] }),
-      statusIntegration: { enabled: true, actionCode: 'TEST_REQUEST_STATUS', reasonCodes: ['TEST_REASON'], authorizeTransition: async () => true } });
-    const task = service.reviewRequest(principal, '90', { decision: 'REJECTED', reasonCode: 'TEST_REASON' });
+      statusIntegration: { enabled: true, actionCode: 'TEST_REQUEST_STATUS', reasonCodes: ['REQUEST_REJECTED'], authorizeTransition: async () => true } });
+    const task = service.reviewRequest(principal, '90', { decision: 'REJECTED' });
     if (!fail) assert.deepEqual(await task, { requestId: '90', requestStatus: 'REJECTED' }); else await assert.rejects(task, { code: 'DATABASE_UNAVAILABLE' });
     const statements = calls.map(({ sql }) => sql);
     assert.ok(statements.findIndex((sql) => sql.includes('FROM Account')) < statements.findIndex((sql) => sql.includes('FROM app_session')));
@@ -171,7 +189,7 @@ test('internal review locks Account/session/request then uses trigger context an
     assert.equal(statements.filter((sql) => sql.startsWith('UPDATE HospitalRequest')).length, 1);
     assert.equal(statements.some((sql) => /INSERT INTO RequestStatusHistory/u.test(sql)), false);
     assert.ok(statements.includes(fail ? 'rollback' : 'commit'));
-    assert.deepEqual(calls.find(({ sql }) => sql.startsWith('UPDATE')).values, ['REJECTED', 'TEST_REASON', '90', 'UNDER_REVIEW']);
+    assert.deepEqual(calls.find(({ sql }) => sql.startsWith('UPDATE')).values, ['REJECTED', 'REQUEST_REJECTED', '90', 'UNDER_REVIEW']);
     if (fail !== 'update') assert.equal(calls.find(({ sql }) => sql.startsWith('INSERT INTO AuditEvent')).values[1], 'TEST_REQUEST_STATUS');
   }
   await assert.rejects(createBloodRequestService({ repository: transactionFixture().repository }).reviewRequest(principal, '90', { decision: 'REJECTED' }), { code: 'REQUEST_FEATURE_NOT_READY' });

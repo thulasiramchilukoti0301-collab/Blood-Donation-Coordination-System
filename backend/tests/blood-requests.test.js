@@ -30,7 +30,7 @@ function errorCode(status, code) {
   return (error) => error instanceof HttpError && error.status === status && error.code === code;
 }
 
-function fakeServiceRepository({ accounts, hospitals, groups, record = safeRecord, failAt = null } = {}) {
+function fakeServiceRepository({ accounts, hospitals, groups, record = safeRecord, failAt = null, activeAllocations = 0 } = {}) {
   const calls = [];
   const counters = { begun: 0, committed: 0, rolledBack: 0, released: 0 };
   const connection = {
@@ -61,6 +61,13 @@ function fakeServiceRepository({ accounts, hospitals, groups, record = safeRecor
       calls.push(['group', id, options]);
       return (groups ?? new Map([['4', { bloodGroupId: '4', code: 'A+', displayName: 'A Positive', isActive: 1 }]])).get(id) ?? null;
     },
+    async lockRequest(id) {
+      calls.push(['lock-request', id]);
+      return id === '90' ? { requestId: id, hospitalAccountId: '12', requestStatus: record.requestStatus } : null;
+    },
+    async countActiveAllocations(id) { calls.push(['active-allocations', id]); return activeAllocations; },
+    async setStatusContext(context) { calls.push(['status-context', context]); },
+    async updateStatus(id, oldStatus, nextStatus, reason) { calls.push(['update-status', id, oldStatus, nextStatus, reason]); },
     async insertRequest(input) {
       calls.push(['insert-request', input]);
       if (failAt === 'request') throw new Error('private SQL detail');
@@ -186,6 +193,24 @@ test('Hospital cancellation stays blocked without authoritative issued quantity 
   assert.throws(() => assertHospitalCancellationBeforeIssue(undefined), errorCode(503, 'REQUEST_FEATURE_NOT_READY'));
   assert.throws(() => assertHospitalCancellationBeforeIssue(1), errorCode(409, 'CANCELLATION_NOT_PERMITTED'));
   assert.equal(assertHospitalCancellationBeforeIssue(0), true);
+});
+
+test('Hospital cancellation is ownership-scoped, blocks active allocations, and atomically writes trigger history plus one audit event', async () => {
+  const { repository, calls, counters } = fakeServiceRepository();
+  const { service, auditCalls } = serviceWith(repository);
+  assert.deepEqual(await service.cancelHospitalRequest(hospitalActor, '90'), { requestId: '90', requestStatus: 'CANCELLED' });
+  assert.equal(counters.committed, 1);
+  assert.deepEqual(calls.find(([name]) => name === 'status-context')[1], { actorAccountId: '12', reasonCode: 'HOSPITAL_CANCELLED' });
+  assert.deepEqual(calls.find(([name]) => name === 'update-status').slice(1), ['90', 'SUBMITTED', 'CANCELLED', 'HOSPITAL_CANCELLED']);
+  assert.equal(auditCalls.length, 1);
+  assert.equal(auditCalls[0].event.actionCode, 'HOSPITAL_REQUEST_CANCELLED');
+  assert.equal(auditCalls[0].event.subjectId, '90');
+  const allocated = fakeServiceRepository({ activeAllocations: 1 });
+  await assert.rejects(serviceWith(allocated.repository).service.cancelHospitalRequest(hospitalActor, '90'), errorCode(409, 'CANCELLATION_NOT_PERMITTED'));
+  assert.equal(allocated.counters.rolledBack, 1);
+  const foreign = fakeServiceRepository({ record: { ...safeRecord, requestStatus: 'SUBMITTED' } });
+  foreign.repository.lockRequest = async () => ({ requestId: '90', hospitalAccountId: '14', requestStatus: 'SUBMITTED' });
+  await assert.rejects(serviceWith(foreign.repository).service.cancelHospitalRequest(hospitalActor, '90'), errorCode(404, 'REQUEST_NOT_FOUND'));
 });
 
 test('service requires a current ACTIVE role and Hospital profile; cross-Hospital reads return the same not-found', async () => {

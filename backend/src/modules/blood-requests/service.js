@@ -4,6 +4,7 @@ import { requestDependencyUnavailable, requestNotFound, requestValidationError }
 import { mapCreatedRequest, mapRequestRecord } from './response.js';
 import { canonicalUnsignedId, validateCreateRequest, validateRequestId, validateRequestListQuery } from './validation.js';
 import { assertRequestStatusTransition } from './lifecycle.js';
+import { requestTransitionReasons } from './contracts.js';
 
 function identityFrom(principal) {
   try {
@@ -86,7 +87,8 @@ export function createBloodRequestService({ repository, auditWriter = null, requ
       if (statusIntegration?.enabled !== true || typeof statusIntegration.authorizeTransition !== 'function'
         || typeof statusIntegration.actionCode !== 'string' || !statusIntegration.actionCode
         || typeof auditWriter?.write !== 'function') throw requestDependencyUnavailable();
-      const reason = input.reasonCode ?? null;
+      const reason = requestTransitionReasons[input.decision];
+      if (input.reasonCode !== undefined && input.reasonCode !== reason) throw requestValidationError();
       if ((reason !== null && !statusIntegration.reasonCodes?.includes(reason))
         || (input.decision === 'REJECTED' && reason === null)) throw requestValidationError();
       return repository.withTransaction(async (transaction, connection) => {
@@ -103,6 +105,33 @@ export function createBloodRequestService({ repository, auditWriter = null, requ
           reasonCode: reason, changeSummary: `Request status changed: ${row.requestStatus} -> ${input.decision}`, operationId: operationId(),
         });
         return { requestId: id, requestStatus: input.decision };
+      });
+    },
+    async cancelHospitalRequest(trustedPrincipal, requestId) {
+      const id = validateRequestId(requestId);
+      if (typeof auditWriter?.write !== 'function') throw requestDependencyUnavailable();
+      const actorId = await authorize(repository, trustedPrincipal, 'HOSPITAL');
+      requireHospitalProfile(await repository.findHospitalByAccountId(actorId));
+      return repository.withTransaction(async (transaction, connection) => {
+        const lockedActorId = await authorize(transaction, trustedPrincipal, 'HOSPITAL', { forUpdate: true });
+        if (lockedActorId !== actorId) throw new HttpError(401, 'ACCOUNT_UNAVAILABLE', 'This account cannot use the current session.');
+        requireHospitalProfile(await transaction.findHospitalByAccountId(actorId, { forUpdate: true }));
+        const row = await transaction.lockRequest(id);
+        if (!row || row.hospitalAccountId !== actorId) throw requestNotFound();
+        assertRequestStatusTransition(row.requestStatus, 'CANCELLED');
+        // Allocation rows are checked while the request lock is held. Allocation writers
+        // must acquire the same request lock first, so cancellation cannot orphan a hold.
+        if (await transaction.countActiveAllocations(id) !== 0) {
+          throw new HttpError(409, 'CANCELLATION_NOT_PERMITTED', 'A request with reserved or issued units cannot be cancelled.');
+        }
+        const reasonCode = 'HOSPITAL_CANCELLED';
+        await transaction.setStatusContext({ actorAccountId: actorId, reasonCode });
+        await transaction.updateStatus(id, row.requestStatus, 'CANCELLED', reasonCode);
+        await auditWriter.write(connection, {
+          actorAccountId: actorId, actionCode: 'HOSPITAL_REQUEST_CANCELLED', subjectType: 'HospitalRequest', subjectId: id,
+          reasonCode, changeSummary: 'Hospital request cancelled', operationId: operationId(),
+        });
+        return { requestId: id, requestStatus: 'CANCELLED' };
       });
     },
     async createHospitalRequest(trustedPrincipal, body) {
