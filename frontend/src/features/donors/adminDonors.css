@@ -1,0 +1,20 @@
+.mint-admin-donor-filters { grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(140px, 1fr)) auto; }
+.mint-donor-detail-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.mint-admin-donor-edit { display: grid; gap: 20px; }
+.mint-admin-donor-edit textarea, .mint-admin-donor-edit select {
+  width: 100%; min-width: 0; min-height: 46px; padding: 11px 13px; border: 1px solid var(--mint-edge);
+  border-radius: 10px; color: var(--mint-ink); background: var(--mint-alt); font: inherit;
+}
+.mint-admin-donor-edit textarea { min-height: 100px; resize: vertical; }
+.mint-admin-donor-edit :is(input, textarea, select):focus-visible { outline: 3px solid var(--mint-strong); outline-offset: 3px; }
+.mint-admin-donor-edit :is(input, textarea, select):disabled { opacity: .7; }
+.mint-admin-details-grid small { display: block; color: var(--mint-muted); font-size: 12px; }
+.mint-donor-confirmation { margin-top: 24px; border-color: var(--mint-edge); }
+.mint-donor-confirmation ul { padding-left: 22px; overflow-wrap: anywhere; }
+.mint-donor-detail-actions .mint-status-pill { margin-right: 4px; }
+@media (max-width: 1050px) { .mint-admin-donor-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .mint-admin-donor-filters { grid-template-columns: minmax(0, 1fr); }
+  .mint-donor-detail-actions { width: 100%; justify-content: space-between; }
+  .mint-donor-detail-actions .mint-button { flex: 1; }
+}
