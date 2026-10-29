@@ -73,7 +73,9 @@ async function mount(path, options = {}) {
     const id = config.url.split('/').at(-1);
     if (f.missing) return fail(404, 'REQUEST_NOT_FOUND');
     return respond({ success: true, request: { ...f.rows[0], requestId: id, requestStatus: 'UNDER_REVIEW', note: 'Isolated operational note',
-      requestStatusHistory: [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27T10:00:00+05:30' }, { oldStatus: 'SUBMITTED', newStatus: 'UNDER_REVIEW', changedAt: '2026-10-27T11:00:00+05:30' }] } });
+      requestStatusHistory: config.url.startsWith('/admin/requests/')
+        ? [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27T10:00:00+05:30', actorAccountId: '12', reasonCode: null }, { oldStatus: 'SUBMITTED', newStatus: 'UNDER_REVIEW', changedAt: '2026-10-27T11:00:00+05:30', actorAccountId: '31', reasonCode: 'REVIEW_STARTED' }]
+        : [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27T10:00:00+05:30' }, { oldStatus: 'SUBMITTED', newStatus: 'UNDER_REVIEW', changedAt: '2026-10-27T11:00:00+05:30' }] } });
   };
   root = createRoot(container);
   root.render(<BrowserRouter>{options.custom ? <CustomApp options={options} /> : <App />}</BrowserRouter>);
@@ -174,7 +176,9 @@ async function scenarios() {
     container.querySelector('button[aria-label="View request 90"]').click();
     await until(() => container.querySelector('.sky-history li'), 'Admin detail');
     assert(document.activeElement === container.querySelector('#request-selected-detail h2'), 'Opening detail moves keyboard focus');
-    assert(content().includes('Isolated Hospital'), 'Safe hospital identity shown'); layoutChecks();
+    assert(content().includes('Isolated Hospital'), 'Safe hospital identity shown');
+    assert(content().includes('Actor Account #31') && content().includes('Reason: REVIEW_STARTED'), 'Admin timeline shows stored actor and reason');
+    layoutChecks();
     await click('Close details'); assert(!container.querySelector('#request-selected-detail'), 'Details close');
     assert(document.activeElement === container.querySelector('button[aria-label="View request 90"]'), 'Closing detail restores keyboard focus');
   });

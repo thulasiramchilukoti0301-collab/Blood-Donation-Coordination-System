@@ -60,7 +60,8 @@ export function createBloodRequestService({ repository, auditWriter = null, requ
     if (historyEnabled === true) {
       const history = await repository.findStatusHistory(result.requestId, { hospitalAccountId });
       result.requestStatusHistory = history.map((event) => ({ oldStatus: event.oldStatus, newStatus: event.newStatus,
-        changedAt: timestampSerializer ? timestampSerializer(event.changedAt) : event.changedAt }));
+        changedAt: timestampSerializer ? timestampSerializer(event.changedAt) : event.changedAt,
+        ...(options.includeHospital ? { actorAccountId: event.actorAccountId ?? null, reasonCode: event.reasonCode ?? null } : {}) }));
     }
     return result;
   }

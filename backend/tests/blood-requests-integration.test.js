@@ -187,13 +187,15 @@ test('optional history reads stay ownership-scoped and serialize only allowliste
   const calls = [];
   const repository = createBloodRequestRepository({ execute: async (sql, values) => {
     calls.push({ sql, values });
-    return [[{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27 10:00:00' }]];
+    return [[{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27 10:00:00', actorAccountId: '12', reasonCode: null }]];
   } });
   await repository.findStatusHistory('90', { hospitalAccountId: '12' });
   assert.deepEqual(calls[0].values, ['90', '12']);
   assert.match(calls[0].sql, /r\.hospital_account_id = \?/u);
   assert.match(calls[0].sql, /ORDER BY s\.changed_at ASC, s\.request_status_history_id ASC/u);
-  assert.doesNotMatch(calls[0].sql, /reason_code|safe_note|password|session/u);
+  assert.match(calls[0].sql, /s\.reason_code AS reasonCode/u);
+  assert.match(calls[0].sql, /CAST\(s\.changed_by_account_id AS CHAR\) AS actorAccountId/u);
+  assert.doesNotMatch(calls[0].sql, /safe_note|password|session/u);
   const actor = { accountId: '12', role: 'HOSPITAL', accountStatus: 'ACTIVE' };
   const fake = {
     findAccountById: async () => actor, findHospitalByAccountId: async () => ({ hospitalId: '12' }),
@@ -206,4 +208,10 @@ test('optional history reads stay ownership-scoped and serialize only allowliste
   assert.equal(detail.neededBy, '2035-10-28T12:00:00+05:30');
   assert.deepEqual(detail.requestStatusHistory, [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27T10:00:00+05:30' }]);
   assert.equal(detail.allocatedQuantity, undefined);
+
+  const adminService = createBloodRequestService({ repository: { ...fake, findAccountById: async () => ({ accountId: '31', role: 'ADMIN', accountStatus: 'ACTIVE' }), findAdminRequest: async () => ({ requestId: '90', recipientGroupId: '4', recipientBloodGroupCode: 'A+', recipientBloodGroupName: 'A Positive', quantityRequested: 3, neededBy: '2035-10-28 12:00:00', createdAt: '2026-10-27 10:00:00', updatedAt: '2026-10-27 10:00:00', priority: 'NORMAL', requestStatus: 'SUBMITTED', hospitalId: '12', organizationName: 'Example Hospital' }),
+    findStatusHistory: async () => [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27 10:00:00', actorAccountId: '12', reasonCode: null }] },
+    historyEnabled: true, timestampSerializer: serializeRequestTimestamp });
+  const adminDetail = await adminService.getAdminRequestRecord({ accountId: '31' }, '90');
+  assert.deepEqual(adminDetail.requestStatusHistory, [{ oldStatus: null, newStatus: 'SUBMITTED', changedAt: '2026-10-27T10:00:00+05:30', actorAccountId: '12', reasonCode: null }]);
 });

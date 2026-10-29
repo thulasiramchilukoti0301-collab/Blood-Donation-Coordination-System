@@ -17,6 +17,7 @@ import RequestDetailPage from './features/blood-requests/RequestDetailPage';
 import AdminRequestsPage from './features/blood-requests/AdminRequestsPage';
 import AllocationWorkspacePage from './features/allocations/AllocationWorkspacePage';
 import CompatibilityManagementPage from './features/allocations/CompatibilityManagementPage';
+import AuditLogPage from './features/audit/AuditLogPage';
 
 const checking = { state: 'checking', message: 'Waiting for a health-check response…' };
 
@@ -89,6 +90,7 @@ export default function App() {
     <Route path="/admin/requests" element={<AdminRequestsPage />} />
     <Route path="/admin/allocations" element={<AllocationWorkspacePage />} />
     <Route path="/admin/compatibility" element={<CompatibilityManagementPage />} />
+    <Route path="/admin/audit" element={<AuditLogPage />} />
     <Route path="/admin/hospitals" element={<AdminHospitalManagement />} />
     <Route path="/admin/accounts" element={<AccountApprovalPage />} />
     <Route path="/account/status" element={<AccountStatusPage />} />

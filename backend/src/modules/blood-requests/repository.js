@@ -183,6 +183,7 @@ export function createBloodRequestRepository(database, { contextAdapter = null }
     },
     async findStatusHistory(requestId, { hospitalAccountId = null } = {}) {
       const [rows] = await execute(`SELECT s.old_status AS oldStatus, s.new_status AS newStatus,
+        CAST(s.changed_by_account_id AS CHAR) AS actorAccountId, s.reason_code AS reasonCode,
         DATE_FORMAT(s.changed_at, '%Y-%m-%d %H:%i:%s') AS changedAt
         FROM RequestStatusHistory s JOIN HospitalRequest r ON r.request_id = s.request_id
         WHERE s.request_id = ?${hospitalAccountId ? ' AND r.hospital_account_id = ?' : ''}

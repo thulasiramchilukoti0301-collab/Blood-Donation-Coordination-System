@@ -1,6 +1,21 @@
 # UI Design Themes
 
-This document records the selected visual themes for the Blood Donation Coordination System. Rose Quartz Focus remains selected for shared Login/Donor registration, access/error, Donor Profile read/edit, and account-status surfaces. **Mint Gauge** is selected for Hospital Registration/Profile, Screen 24 Admin Hospital Management, and the shared Account management supporting flow at `/admin/accounts`; scoped Mint styles do not change shared or Donor appearances or assign a theme to the rest of Donor Management. **Sky Pipeline** is assigned to Feature 7 Screens 12, 13, 14, and 25 (Create Blood Request, My Blood Requests, Blood Request Details, and Admin Blood Request Management). **Indigo Inventory** is selected for Feature 8 Screens 26 and 27 at `/admin/allocations` and `/admin/compatibility`. Theme assignments for other unimplemented screens remain open for later user choice.
+This document records the selected visual themes for the Blood Donation Coordination System. Rose Quartz Focus remains selected for shared Login/Donor registration, access/error, Donor Profile read/edit, and account-status surfaces. **Mint Gauge** is selected for Hospital Registration/Profile, Screen 24 Admin Hospital Management, and the shared Account management supporting flow at `/admin/accounts`; scoped Mint styles do not change shared or Donor appearances or assign a theme to the rest of Donor Management. **Sky Pipeline** is assigned to Feature 7 Screens 12, 13, 14, and 25 (Create Blood Request, My Blood Requests, Blood Request Details, and Admin Blood Request Management). **Indigo Inventory** is selected for Feature 8 Screens 26 and 27 at `/admin/allocations` and `/admin/compatibility`. **Cobalt Ledger** is scoped to Feature 9 Screen 28 at `/admin/audit`. Other unimplemented screens remain open for later assignment.
+
+## Cobalt Ledger
+
+| Token / property | Value |
+|---|---|
+| Background | `#F4F7FA` |
+| White surfaces | `#FFFFFF` |
+| Main text | `#203247` |
+| Muted text | `#62758A` |
+| Primary / strong action | `#286A78` / `#1D5561` |
+| Borders | `#D9E2E9` |
+| Quiet surface | `#EAF2F5` |
+| Keyboard focus | `#D18A37` |
+| Typography | Manrope headings; DM Sans body and controls |
+| Interaction | Structured filter form, responsive event table/cards, visible focus, reduced motion |
 
 ## Indigo Inventory
 

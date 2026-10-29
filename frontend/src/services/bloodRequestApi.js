@@ -30,7 +30,13 @@ export function readRequest(row) {
     record.requestStatusHistory = row.requestStatusHistory.map((event) => {
       if (!REQUEST_STATUSES.includes(event.newStatus) || (event.oldStatus !== null && !REQUEST_STATUSES.includes(event.oldStatus))
         || !text(event.changedAt)) throw invalid();
-      return { oldStatus: event.oldStatus, newStatus: event.newStatus, changedAt: event.changedAt };
+      const safe = { oldStatus: event.oldStatus, newStatus: event.newStatus, changedAt: event.changedAt };
+      if (Object.hasOwn(event, 'actorAccountId')) safe.actorAccountId = event.actorAccountId === null ? null : requestId(event.actorAccountId);
+      if (Object.hasOwn(event, 'reasonCode')) {
+        if (event.reasonCode !== null && (!text(event.reasonCode) || [...event.reasonCode].length > 40)) throw invalid();
+        safe.reasonCode = event.reasonCode;
+      }
+      return safe;
     });
   }
   return record;
