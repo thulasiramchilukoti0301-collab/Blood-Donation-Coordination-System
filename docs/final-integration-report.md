@@ -2,10 +2,10 @@
 
 Date: 2026-10-29
 Branch: `lathikaa`
-HEAD at inspection: `678b8ac62617346ff47eeecf6b2ad51e96560160`
+Pre-merge inspection HEAD: `678b8ac62617346ff47eeecf6b2ad51e96560160`
 ## Merged integration update — 2026-10-29
 
-This update supersedes the earlier pre-merge status below. `origin/thulasiram` at verified commit `8129015bf4588d6afd8ce703fbd647889c4ff888` was integrated into `lathikaa`; both the request/audit/report implementation and donor/booking/donation/release implementation are present. The merge preserves routes and role navigation, and the Hospital request link is shown only to ACTIVE Hospitals. No push was performed. Migration 009 was not executed and no development database was contacted.
+This update supersedes the earlier pre-merge status below. Merge commit: `08b8c5b2d775728e7e6c9a90a2ca2de7fa43f63c`. `origin/thulasiram` at verified commit `8129015bf4588d6afd8ce703fbd647889c4ff888` was integrated into `lathikaa`; both the request/audit/report implementation and donor/booking/donation/release implementation are present. The merge preserves routes and role navigation, and the Hospital request link is shown only to ACTIVE Hospitals. No push was performed. Migration 009 was not executed and no development database was contacted.
 
 ### Disposable MySQL workflow
 
