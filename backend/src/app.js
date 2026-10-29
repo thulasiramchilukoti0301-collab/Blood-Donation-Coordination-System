@@ -10,6 +10,7 @@ import { createHospitalRouter } from './modules/hospitals/router.js';
 import { createOperationalBloodRequestRouter } from './modules/blood-requests/runtime.js';
 import { createOperationalAllocationReadRouter } from './modules/allocations/readRuntime.js';
 import { createOperationalAuditReadRouter } from './modules/audit/readRuntime.js';
+import { createOperationalReportsRouter } from './modules/reports/runtime.js';
 
 export function createApp({
   verifyDatabase = verifyDatabaseConnection,
@@ -18,6 +19,7 @@ export function createApp({
   bloodRequestRouter = createOperationalBloodRequestRouter(),
   allocationReadRouter = createOperationalAllocationReadRouter(),
   auditReadRouter = createOperationalAuditReadRouter(),
+  reportsRouter = createOperationalReportsRouter(),
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -39,6 +41,7 @@ export function createApp({
   app.use('/api', bloodRequestRouter);
   app.use('/api', allocationReadRouter);
   app.use('/api', auditReadRouter);
+  app.use('/api', reportsRouter);
   app.use((req, res, next) => next(new HttpError(404, 'NOT_FOUND', 'API route not found.')));
   app.use(errorHandler);
   return app;

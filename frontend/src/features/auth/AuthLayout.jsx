@@ -12,7 +12,8 @@ export default function AuthLayout({ children, wide = false, theme = 'rose' }) {
   const sky = theme === 'sky';
   const indigo = theme === 'indigo';
   const audit = theme === 'audit';
-  const prefix = audit ? 'audit' : indigo ? 'indigo' : sky ? 'sky' : mint ? 'mint' : 'rose';
+  const dashboard = theme === 'dashboard';
+  const prefix = dashboard ? 'dashboard' : audit ? 'audit' : indigo ? 'indigo' : sky ? 'sky' : mint ? 'mint' : 'rose';
   const signOut = async () => {
     setLogoutBusy(true);
     setLogoutError('');
@@ -35,8 +36,8 @@ export default function AuthLayout({ children, wide = false, theme = 'rose' }) {
           <nav className={`${prefix}-nav`} aria-label="Account navigation">
             {user ? <>
               {user.role === 'ADMIN' && user.accountStatus === 'ACTIVE'
-                ? <><Link to="/admin/hospitals" aria-current={pathname === '/admin/hospitals' ? 'page' : undefined}>Hospital management</Link><Link to="/admin/accounts" aria-current={pathname === '/admin/accounts' ? 'page' : undefined}>Account management</Link><Link to="/account/status" aria-current={pathname === '/account/status' ? 'page' : undefined}>Account status</Link><Link to="/admin/allocations" aria-current={pathname.startsWith('/admin/allocations') ? 'page' : undefined}>Request allocation</Link><Link to="/admin/compatibility" aria-current={pathname === '/admin/compatibility' ? 'page' : undefined}>Compatibility</Link><Link to="/admin/audit" aria-current={pathname === '/admin/audit' ? 'page' : undefined}>Audit log</Link></>
-                : user.role === 'HOSPITAL' ? <Link to="/hospital/profile" aria-current={pathname === '/hospital/profile' ? 'page' : undefined}>Hospital Profile</Link> : user.role === 'DONOR'
+                ? <><Link to="/admin" aria-current={pathname === '/admin' ? 'page' : undefined}>Dashboard</Link><Link to="/admin/reports" aria-current={pathname.startsWith('/admin/reports') ? 'page' : undefined}>Reports</Link><Link to="/admin/hospitals" aria-current={pathname === '/admin/hospitals' ? 'page' : undefined}>Hospital management</Link><Link to="/admin/accounts" aria-current={pathname === '/admin/accounts' ? 'page' : undefined}>Account management</Link><Link to="/account/status" aria-current={pathname === '/account/status' ? 'page' : undefined}>Account status</Link><Link to="/admin/allocations" aria-current={pathname.startsWith('/admin/allocations') ? 'page' : undefined}>Request allocation</Link><Link to="/admin/compatibility" aria-current={pathname === '/admin/compatibility' ? 'page' : undefined}>Compatibility</Link><Link to="/admin/audit" aria-current={pathname === '/admin/audit' ? 'page' : undefined}>Audit log</Link></>
+                : user.role === 'HOSPITAL' ? <><Link to="/hospital" aria-current={pathname === '/hospital' ? 'page' : undefined}>Dashboard</Link><Link to="/hospital/profile" aria-current={pathname === '/hospital/profile' ? 'page' : undefined}>Hospital Profile</Link></> : user.role === 'DONOR'
                 ? <Link to="/donor/profile">My profile</Link>
                 : <Link to="/account/status">Account status</Link>}
               {user.accountStatus === 'ACTIVE' && ['ADMIN', 'HOSPITAL'].includes(user.role) && <Link to={user.role === 'ADMIN' ? '/admin/requests' : '/hospital/requests'} aria-current={pathname.startsWith(user.role === 'ADMIN' ? '/admin/requests' : '/hospital/requests') ? 'page' : undefined}>Blood requests</Link>}

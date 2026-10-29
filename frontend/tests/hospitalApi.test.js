@@ -89,7 +89,7 @@ test('safe backend conflicts and session errors propagate to existing frontend e
   }
 });
 
-test('role landing routes Hospital and ACTIVE Admin while preserving Donor and status destinations', () => {
+test('role landing preserves the existing Hospital profile and ACTIVE Admin management destinations', () => {
   assert.equal(accountHome({ role: 'HOSPITAL', accountStatus: 'PENDING' }), '/hospital/profile');
   assert.equal(accountHome({ role: 'HOSPITAL', accountStatus: 'ACTIVE' }), '/hospital/profile');
   assert.equal(accountHome({ role: 'DONOR' }), '/donor/profile');
