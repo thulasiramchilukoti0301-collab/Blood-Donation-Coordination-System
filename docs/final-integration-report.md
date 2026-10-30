@@ -12,6 +12,12 @@ This current update supersedes the historical sections below that state Feature 
 
 The complete transaction/lock behavior and Feature 8 test details are in [feature8-implementation.md](feature8-implementation.md). Earlier integration checkpoints are preserved below as historical records.
 
+## Thulasiram integration and verification — 2026-10-30
+
+Reviewed incoming commit `6b8eb4c3b102012638b09a66d69b06d6a51fe91e` was integrated into `thulasiram` as merge commit `3d4fe84`; the local Reports fix and Group 14 submission package were committed first as `b95e732`. No merge conflicts occurred. The post-merge local disposable HTTP/MySQL integration passed 301 assertions on MySQL 8.0.46, using a fresh isolated server and schema which were removed afterward. It covered exact FEFO allocation, issue, concurrent duplicate allocation/issue attempts, audit rollback and read-after-write projections. The development and Group 14 demo databases were not contacted.
+
+The protected backend suite passed **422/422** database-free tests. The serial frontend suite passed **102/102**, including browser fixture runs for Feature 8 at 1262px, 750px and 504px, Reports at 1262px, 750px and 504px, and the other established browser widths. The environment-disabled in-memory production build transformed 149 modules; `git diff --check` passed. The incoming Lathikaa report's MySQL 9.1 301-assertion run is retained above as separately attributed evidence. The fictional Group 14 seed counts and procedure run remain USER-RUN seeded-data/read-only evidence and do not verify allocation or issuing.
+
 Date: 2026-10-29
 Branch: `lathikaa`
 Pre-merge inspection HEAD: `678b8ac62617346ff47eeecf6b2ad51e96560160`

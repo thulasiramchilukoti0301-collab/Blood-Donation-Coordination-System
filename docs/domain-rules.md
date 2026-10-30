@@ -100,7 +100,7 @@ Hospital, requested ABO/Rh group, positive integer `quantityRequested`, priority
 - `UNDER_REVIEW -> REJECTED` by staff with reason; rejected is terminal
 - `FULFILLED`, `CANCELLED`, `REJECTED` are terminal
 
-Hospital cancellation is allowed only before any unit has been issued. Staff cancellation after partial issue remains OPEN, including whether staff has that permission and its transition/audit contract. If that permission is approved, a proposed preservation rule is to retain issued Allocation rows/units and cancel/release only unissued allocations, returning units only when still usable and unexpired. Request quantity stays immutable after submission.
+The approved domain limit for Hospital cancellation is before any unit has been issued. The current bounded endpoint is narrower: it also refuses cancellation while any active ALLOCATED row exists because individual deallocation is not implemented; it does not release reservations. Staff cancellation after partial issue remains OPEN, including whether staff has that permission and its transition/audit contract. If that permission is approved, a proposed preservation rule is to retain issued Allocation rows/units and cancel/release only unissued allocations, returning units only when still usable and unexpired. Request quantity stays immutable after submission.
 
 | Derived request state | Current Allocation quantities | Result |
 |---|---|---|
@@ -148,7 +148,7 @@ Represent compatibility relationally in `BloodGroup` and `BloodCompatibility`, w
 - If compatible inventory is insufficient, do not create phantom units, substitute an incompatible group, or silently reduce requested quantity. The hospital sees allocated/issued and outstanding counts.
 - Allocation is a single database transaction: lock/recheck candidate available units, use transaction-local reservation/row locks, set unit and allocation to `ALLOCATED`, update request status, write audit event, and commit. On any failure roll back all effects. Expire candidates at decision time before selecting.
 - Allocation capacity is `quantityRequested - current ALLOCATED quantity - current ISSUED quantity`; requests with terminal status cannot be allocated. A zero-additional-unit result derives the request status from all current allocations as specified above.
-- Allocation, issue, request/allocation cancellation, discard, and expiry must use one consistent locking strategy to prevent double assignment, issuing cancelled/expired units, over-allocation, and terminal-state regression. The exact strategy is to be implemented and verified with concurrent MySQL connections in Phase 3; it is not yet verified.
+- The integrated Feature 8 allocation and issue writers use Account/SID, request, BloodGroup (for allocation), BloodUnit in expiry-date/unit-ID order, then relevant Allocation row locks, followed by same-transaction unit/allocation/request/history/audit writes. The isolated MySQL integration passed concurrent duplicate allocation and issue attempts and audit-failure rollback. Cross-operation contention with release, expiry, discard and cancellation writers still requires coordinated concurrent MySQL verification; individual allocation cancellation is not implemented. Request cancellation after partial issue remains OPEN.
 - Cancelling an individual allocation before issue changes its allocation record to `CANCELLED` and returns the unit to `AVAILABLE` if it remains usable/unexpired, otherwise `EXPIRED`; audit the action.
 
 ## 7. Audit events

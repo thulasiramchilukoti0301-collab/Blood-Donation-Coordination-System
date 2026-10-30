@@ -1,6 +1,6 @@
 # Feature 8 implementation status — 2026-10-30
 
-**Implemented and verified on branch `lathikaa`.** This section supersedes the earlier “mutation remains disabled” and allocation-gate checkpoint text below; those entries are retained as history of the interrupted implementation.
+**Implemented by Lathikaa on `lathikaa`; integrated into Thulasi's `thulasiram` from reviewed `origin/main` commit `6b8eb4c`.** This section supersedes the earlier “mutation remains disabled” and allocation-gate checkpoint text below; those entries are retained as history of the interrupted implementation.
 
 ## Completed workflow
 
@@ -19,6 +19,8 @@ This ordering coordinates with the current release, expiry, discard, and Hospita
 
 ## Verification
 
+- On `thulasiram`, the isolated final HTTP/MySQL integration passed **301 assertions** against a fresh disposable MySQL 8.0.46 server. It applied the required migrations only to the fresh disposable schema, verified FEFO reservation and issue, concurrent duplicate allocation and issue conflicts, both audit-failure rollbacks, and read-after-write projections, then removed the disposable server/schema/user/files. No development or Group 14 database was contacted. The incoming Lathikaa checkpoint separately reports its 301-assertion disposable run on MySQL 9.1; that remains separately attributed evidence.
+- The post-merge protected backend suite passed **422/422** after adding a regression for an intended issue date expiring during allocation lock waits. The frontend suite passed **102/102**, including the existing real-browser Feature 8 fixture at 1262px, 750px and 504px. The environment-disabled in-memory production build transformed 149 modules. `git diff --check` passed. Browser and disposable checks are fixture/isolated-server evidence, not USER-RUN developer-database workflows.
 - Disposable MySQL 9.1 production HTTP integration passed **301 assertions**. Migrations 001–012 prerequisites including 009, 010, and 012 were assembled only in a fresh disposable instance. The test covered exact FEFO preview/reservation, a stale resubmission, two concurrent reservation attempts (one success, one conflict), audit-trigger rollback, two concurrent issue attempts (one success, one conflict), issue-audit rollback, exact audit events and request history, and inventory, dashboard, audit-log, and report reads after commit. The disposable schema, user, process, and directory were removed. The development database was never configured or contacted; migration 009 was not run there.
 - Feature 8 browser scenario passed at 1258px, 746px, and 512px, including reserve and issue controls.
 - Full backend and frontend suites and production build are recorded in `docs/final-integration-report.md`.

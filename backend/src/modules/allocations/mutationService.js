@@ -153,6 +153,10 @@ export function createAllocationMutationService({ repository, auditWriter = crea
           // Revalidate the actual stored session after all row-lock waits and
           // immediately before the first write.
           await requireStoredSession(connection, authorization, actor);
+          // The intended issue date may have passed while this transaction
+          // waited on request, group, unit, or allocation locks. Do not reserve
+          // against a date that is no longer today or in the future.
+          if (values.intendedIssueDate < todayIst(clock())) throw stale();
           const op = operationId();
           const created = [];
           const firstIds = new Map(expected.map((unitId, index) => [unitId, snapshot[index]]));
