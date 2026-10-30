@@ -98,6 +98,12 @@
 .indigo-feedback p { color: var(--indigo-muted); }
 .indigo-feedback [role="alert"], .indigo-error { color: #A62C3A; }
 .indigo-footnote { margin-top: 10px; }
+.indigo-app-shell .indigo-table input[type="checkbox"] { width: 20px; min-width: 20px; min-height: 20px; accent-color: var(--indigo-primary); }
+.indigo-dialog-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 20px; background: #17172B80; }
+.indigo-dialog { width: min(520px, 100%); padding: 24px; border: 1px solid var(--indigo-border); border-radius: 16px; background: #FFFFFF; box-shadow: 0 20px 70px #17172B40; }
+.indigo-dialog h2 { margin: 0 0 12px; color: var(--indigo-ink); font-size: 20px; }
+.indigo-dialog p { color: var(--indigo-muted); overflow-wrap: anywhere; }
+.indigo-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .indigo-pair-controls { display: grid; grid-template-columns: minmax(180px,1fr) 30px minmax(180px,1fr) minmax(145px,auto); align-items: end; gap: 14px; margin-top: 16px; }
 .indigo-direction { align-self: center; padding-top: 20px; color: var(--indigo-primary); font-size: 25px; text-align: center; }
 .indigo-pair-result { align-self: center; margin: 0; padding: 9px 12px; border-radius: 9px; text-align: center; font-size: 13px; font-weight: 800; }

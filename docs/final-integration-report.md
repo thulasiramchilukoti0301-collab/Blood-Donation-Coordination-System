@@ -1,5 +1,17 @@
 # Final integration and activation report
 
+## Feature 8 completion update — 2026-10-30
+
+This current update supersedes the historical sections below that state Feature 8 allocation and issue mutations are disabled. Work remains on branch `lathikaa`; no commit, merge or push was made.
+
+- Exact FEFO reservation is mounted at `POST /api/admin/requests/:requestId/allocations`; issue is mounted at `POST /api/admin/allocations/:allocationId/issue`. Both require an ACTIVE Admin, current stored session, trusted Origin and CSRF. Reservation/issue, request transitions, trigger history and audit events are atomic. Request fulfillment requires all requested units to be issued.
+- The Admin allocation page now uses live preview and mutation APIs for Confirm Allocation and Issue. Stale candidates and simultaneous submissions cannot substitute units or create duplicate active reservations/issue events. Reads refresh from committed tables and the E2E test confirms inventory, dashboards, reports, audit log and history reflect those writes.
+- Fresh disposable MySQL 9.1 production HTTP integration passed **301 assertions**, including two concurrent allocation POSTs (one success/one conflict), two concurrent issue POSTs (one success/one conflict), audit-insert rollback for both operations, stale resubmission, and exact `ALLOCATION_ISSUED` actor/subject/null-reason/fixed-summary checks. Migrations 009, 010 and 012 were applied only to this disposable server/schema, which was removed afterward. Development database configuration/data was not read or modified; migration 009 was not run on the development database.
+- Backend tests: **420 passed, 0 failed**. Frontend tests: **98 passed, 0 failed**, run sequentially so browser sessions do not compete. Feature 8 browser controls passed desktop (1258px), tablet (746px), and mobile (512px); the other browser suites passed in the same serial run.
+- Production frontend build passed. Vite reports the existing 589 kB minified JavaScript chunk exceeds its 500 kB advisory threshold.
+
+The complete transaction/lock behavior and Feature 8 test details are in [feature8-implementation.md](feature8-implementation.md). Earlier integration checkpoints are preserved below as historical records.
+
 Date: 2026-10-29
 Branch: `lathikaa`
 Pre-merge inspection HEAD: `678b8ac62617346ff47eeecf6b2ad51e96560160`

@@ -1,5 +1,5 @@
 // Fresh isolated MySQL instance for authorized final HTTP integration checks.
-// Does not read .env, contact the development DB, or execute migration 009.
+// Does not read .env or contact the development DB. Applies 009 only to this fresh disposable schema.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, rm } from 'node:fs/promises';
@@ -49,19 +49,16 @@ try {
   schema = `bddc_phase3_test_final_${label}`;
   await connection.query(`CREATE DATABASE ${schema} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`);
   await connection.changeUser({ database: schema }); await connection.query("SET time_zone = '+05:30'");
-  for (const file of ['migrations/001_foundation.sql', 'migrations/002_auth.sql', 'infrastructure/auth_sessions.sql', 'seeds/reference_data.sql', 'migrations/003_donors.sql', 'migrations/004_hospitals.sql', 'migrations/005_eligibility_booking.sql', 'migrations/006_donations.sql', 'migrations/007_inventory.sql', 'migrations/008_blood_requests.sql', 'migrations/010_audit.sql', 'migrations/012_request_status_history.sql']) {
+  for (const file of ['migrations/001_foundation.sql', 'migrations/002_auth.sql', 'infrastructure/auth_sessions.sql', 'seeds/reference_data.sql', 'migrations/003_donors.sql', 'migrations/004_hospitals.sql', 'migrations/005_eligibility_booking.sql', 'migrations/006_donations.sql', 'migrations/007_inventory.sql', 'migrations/008_blood_requests.sql', 'migrations/009_compatibility_allocation.sql', 'migrations/010_audit.sql', 'migrations/012_request_status_history.sql']) {
     for (const sql of mysqlStatements(await readFile(resolve(root, 'database', file), 'utf8'))) await connection.query(sql);
   }
-  // Cancellation's pre-allocation check needs an empty relation. This test-only view
-  // deliberately models no active rows and cannot create or mutate allocations.
-  await connection.query("CREATE VIEW Allocation AS SELECT CAST(NULL AS UNSIGNED) AS request_id, CAST(NULL AS CHAR(16)) AS allocation_status WHERE 1=0");
   const vars = { DB_HOST: '127.0.0.1', DB_PORT: String(port), DB_NAME: schema, DB_USER: 'root', DB_PASSWORD: 'disposable-only', FRONTEND_URL: 'http://localhost:5173', SESSION_SECRET: randomUUID() + randomUUID(), SESSION_TTL_MINUTES: '120', NODE_ENV: 'test' };
   // Create a disposable-only passworded app user; this user has no privileges outside this fresh schema.
   await connection.query("CREATE USER 'bddc_app'@'127.0.0.1' IDENTIFIED BY 'disposable-only'");
   await connection.query(`GRANT ALL PRIVILEGES ON \`${schema}\`.* TO 'bddc_app'@'127.0.0.1'`);
   vars.DB_USER = 'bddc_app';
   await connection.end(); connection = null;
-  console.log(`MySQL ${actual.version}; assembled approved prerequisites, skipping 009.`);
+  console.log(`MySQL ${actual.version}; applied ordered migrations 001-010 and 012 to the fresh disposable schema.`);
   console.log(await run(process.execPath, ['--experimental-loader', './backend/tests/helpers/no-private-env-loader.mjs', 'database/tests/verify-final-integration-http.mjs'], vars));
 } finally {
   if (connection) { try { await connection.query('SHUTDOWN'); } catch {} try { await connection.end(); } catch {} }

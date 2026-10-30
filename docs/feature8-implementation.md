@@ -1,4 +1,29 @@
-# Feature 8 storage and internal FEFO milestone
+# Feature 8 implementation status — 2026-10-30
+
+**Implemented and verified on branch `lathikaa`.** This section supersedes the earlier “mutation remains disabled” and allocation-gate checkpoint text below; those entries are retained as history of the interrupted implementation.
+
+## Completed workflow
+
+- ACTIVE Admin only. Both mutation routes also require the current stored session, trusted Origin, and same-session CSRF.
+- `POST /api/admin/requests/:requestId/allocations` accepts the exact ordered FEFO BloodUnit IDs shown in the preview and an intended issue date. It never substitutes units. Under transaction locks, it revalidates request eligibility/capacity, compatibility, approval, collection outcome, expiry, unit status, and active-allocation uniqueness. A changed preview returns a conflict.
+- Reservation changes `BloodUnit` and `Allocation` from `AVAILABLE` to `ALLOCATED`. The first reservation moves a request to `PARTIALLY_FULFILLED`; reservations alone never fulfill it.
+- `POST /api/admin/allocations/:allocationId/issue` accepts one trimmed nonblank handoff reference of at most 80 input characters. It moves both records from `ALLOCATED` to `ISSUED`, writes exactly one `ALLOCATION_ISSUED` event with null reason and summary `Blood unit issued to hospital`, and only moves the request to `FULFILLED` after every requested unit has been issued.
+- Allocation creation and issue events, request status audit events, trigger-generated `RequestStatusHistory`, and inventory/request updates share one MySQL transaction. Audit failure rolls back the business change. Unknown commit outcomes require a fresh read and are never automatically retried.
+- The Admin allocation workspace now has Confirm Allocation and Issue controls. It obtains fresh CSRF, prevents obsolete pre-dispatch confirmation, blocks duplicate in-flight submissions, refreshes request and preview reads after settlement, and tells the operator to reconcile uncertain outcomes. The inventory, Admin/Hospital dashboards, audit log, and reports read persisted database state.
+
+## Locking and concurrency
+
+The mutation transaction locks the ACTIVE Admin account first and validates its stored SID on the same connection. Allocation then locks the HospitalRequest, BloodGroup rows in ID order (serializing against approved release adding a candidate), candidate/current request BloodUnits in `(expiry_date, blood_unit_id)` order, and relevant Allocation rows in allocation ID order. It rechecks its exact FEFO prefix and state after locks, before writes. Issuing follows the same request/unit/allocation order. Conditional updates and the active-unit unique key remain final guards. Deadlocks/timeouts return a conflict; uncertain commit/cleanup destroys the pooled connection.
+
+This ordering coordinates with the current release, expiry, discard, and Hospital cancellation implementations: release locks group before creating a unit; expiry locks units in the same expiry/ID ordering and only changes AVAILABLE units; discard and reservation compete on the same conditionally updated AVAILABLE unit; Hospital cancellation locks the request before counting active allocations. Existing shared writers were inspected; no Feature 8 lock-order changes were made to their implementations.
+
+## Verification
+
+- Disposable MySQL 9.1 production HTTP integration passed **301 assertions**. Migrations 001–012 prerequisites including 009, 010, and 012 were assembled only in a fresh disposable instance. The test covered exact FEFO preview/reservation, a stale resubmission, two concurrent reservation attempts (one success, one conflict), audit-trigger rollback, two concurrent issue attempts (one success, one conflict), issue-audit rollback, exact audit events and request history, and inventory, dashboard, audit-log, and report reads after commit. The disposable schema, user, process, and directory were removed. The development database was never configured or contacted; migration 009 was not run there.
+- Feature 8 browser scenario passed at 1258px, 746px, and 512px, including reserve and issue controls.
+- Full backend and frontend suites and production build are recorded in `docs/final-integration-report.md`.
+
+## Earlier milestone notes
 
 ## Development database status — 2026-10-29
 

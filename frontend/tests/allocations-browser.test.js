@@ -17,7 +17,7 @@ function launch(url, profile, width) { return new Promise((resolveOutput, reject
   child.stdout.on('data', (chunk) => { stdout += chunk; }); child.stderr.on('data', (chunk) => { stderr += chunk; });
   child.on('error', reject); child.on('close', (code) => { clearTimeout(timeout); code === 0 ? resolveOutput(stdout) : reject(new Error(stderr.slice(-1000))); });
 }); }
-test('Feature 8 read-only Admin pages render accessibly and responsively in a real browser', { timeout: 180000 }, async () => {
+test('Feature 8 Admin pages render accessibly and support reserve/issue controls in a real browser', { timeout: 180000 }, async () => {
   assert.ok(browser, 'Installed Chrome or Edge required');
   const server = await createServer({ root, configFile: false, envDir: false, plugins: [react()], logLevel: 'error', server: { host: '127.0.0.1', port: 0, hmr: false } });
   await server.listen(); await mkdir(tempRoot, { recursive: true });
