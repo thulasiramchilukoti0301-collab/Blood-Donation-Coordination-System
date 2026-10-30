@@ -34,9 +34,19 @@ if (!hospitalMode) await scenario('Admin reports render aggregates and submit da
   history.replaceState({}, '', '/admin/reports'); window.dispatchEvent(new PopStateEvent('popstate'));
   await until(() => container.textContent.includes('Fixture Hospital'));
   assert(container.textContent.includes('Donation outcomes over time') && container.textContent.includes('Request activity by day'), 'Trend displays render');
+  const initialDonationCall = calls.find((call) => call.url === '/admin/reports/donations');
+  const initialRequestCall = calls.find((call) => call.url === '/admin/reports/requests');
+  assert(initialDonationCall && initialDonationCall.params?.from === undefined && initialDonationCall.params?.to === undefined && initialDonationCall.params?.interval === 'DAY', 'Initial donation report omits empty dates and keeps interval');
+  assert(initialRequestCall && initialRequestCall.params?.from === undefined && initialRequestCall.params?.to === undefined && initialRequestCall.params?.interval === 'DAY', 'Initial request report omits empty dates and keeps interval');
   const from = container.querySelector('input[type="date"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(from, '2026-10-01'); from.dispatchEvent(new Event('input', { bubbles: true })); from.dispatchEvent(new Event('change', { bubbles: true }));
   [...container.querySelectorAll('button')].find((button) => button.textContent.includes('Apply filters')).click(); await wait();
   assert(calls.filter((call) => call.url === '/admin/reports/donations').some((call) => call.params?.from === '2026-10-01'), 'Date filter reaches API');
+  assert(calls.filter((call) => call.url === '/admin/reports/donations').some((call) => call.params?.from === '2026-10-01' && call.params?.to === undefined), 'One-sided date omits the blank end date');
+  const beforeClear = calls.length;
+  [...container.querySelectorAll('button')].find((button) => button.textContent.includes('Clear')).click();
+  await until(() => calls.slice(beforeClear).some((call) => call.url === '/admin/reports/donations') && calls.slice(beforeClear).some((call) => call.url === '/admin/reports/requests'));
+  const clearedCalls = calls.slice(beforeClear).filter((call) => ['/admin/reports/donations', '/admin/reports/requests'].includes(call.url));
+  assert(clearedCalls.length >= 2 && clearedCalls.every((call) => call.params?.from === undefined && call.params?.to === undefined && call.params?.interval === 'DAY'), 'Clear reload omits dates and resets interval');
 });
 if (hospitalMode) await scenario('Hospital dashboard shows session-scoped data and no hospital selector', async () => {
   history.replaceState({}, '', '/hospital'); window.dispatchEvent(new PopStateEvent('popstate'));

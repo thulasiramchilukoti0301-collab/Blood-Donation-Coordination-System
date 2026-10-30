@@ -66,6 +66,18 @@ The user reported that an inactive Donor check-in attempt was rejected while the
 
 This user-reported flow is separate from the automated 303-backend/63-frontend results and the four-viewport browser checks above. It records only the stated local observations; it does not establish live concurrency, rollback, lock-wait expiry, or broader security coverage.
 
+## USER-RUN individual staff-cancellation evidence (reported 2026-10-29)
+
+The user reported that, on the running Admin bookings page, Booking 6 for Slot 3 was cancelled individually. The page reported “Cancel individual booking was saved,” and the booking card showed `CANCELLED_BY_STAFF`. MySQL Workbench showed Booking 6 / Slot 3 with status `CANCELLED_BY_STAFF`, `cancellation_reason` `STAFF_CANCELLED`, and `status_changed_at` `2026-10-29 20:34:45`. A read-only AuditEvent query showed exactly one `BOOKING_CANCELLED_BY_STAFF` event for Booking 6 with reason `STAFF_CANCELLED`, alongside exactly one original `BOOKING_CREATED` event with reason `DONOR_RESERVED`.
+
+This is user-reported live evidence for that individual cancellation only. It is separate from automated/fixture results and does not verify concurrency, rollback, lock-wait expiry, or broader security behavior; it is not evidence for the NO_SHOW action.
+
+## USER-RUN individual NO_SHOW evidence (reported 2026-10-29)
+
+The user reported that the Admin bookings page displayed “Mark no-show was saved.” The Donor booking page showed Booking 1 / Slot 2 as `NO_SHOW`. MySQL Workbench showed Booking 1 / Slot 2 with status `NO_SHOW` and `status_changed_at` `2026-10-29 22:09:36`. A read-only AuditEvent query showed exactly one `BOOKING_MARKED_NO_SHOW` event for Booking 1 with reason `STAFF_NO_SHOW`. The SQL checks were read-only; no migration or schema change was made.
+
+This user-reported evidence is separate from automated/fixture results and from the Booking 6 staff-cancellation evidence above. It covers only this reported NO_SHOW flow and does not verify concurrency, rollback, lock-wait expiry or broader security behavior.
+
 ## Codex verification for individual Admin booking actions
 
 The follow-up adds individual `BOOKED -> CANCELLED_BY_STAFF` before slot start and `BOOKED -> NO_SHOW` at or after slot end. Both require an ACTIVE Admin session, an ACTIVE Donor target, a non-cancelled slot and no Donation; CLOSED slots retain their appointments. They use exact fixed bodies and audit mappings. Other statuses conflict, and Donation completion remains unchanged. Fresh authoritative Admin SID verification occurs after Account and domain lock waits before the conditional `BOOKED` update. Audit and status change share the existing transaction; known conflicts refresh by GET, uncertain outcomes are never retried and use the booking list read.

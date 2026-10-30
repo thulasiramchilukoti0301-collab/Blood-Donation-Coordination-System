@@ -25,6 +25,7 @@ This is a documentation checklist, not evidence that the report or implementatio
 
 - Deliver both DOCX and PDF versions, using the college filename pattern `GroupNo_ProjectTitle_Report` for each file. Confirm the exact group-number and project-title spelling with the college template.
 - Include a ZIP containing the complete project source code and SQL needed to create and populate the database.
+- For the database portion of that ZIP, include the canonical numbered migrations and reference seed, `database/infrastructure/auth_sessions.sql`, `database/views/available_inventory.sql`, the standalone versioned read-only routine `database/routines/inventory_summary_by_group.v1.sql`, and the Group 14 package under [`database/submission`](../database/submission/): the safe fresh-build runner, fictional demo DML, read-only verification/report queries, and separate demo-only credentials note. The documented runner targets only the new fixed Group 14 local schema and refuses an existing target; keep its files and warnings with the ZIP. USER-RUN evidence reported 2026-10-30 confirms installation and CALL in the existing Group 14 schema; the current fresh-build package's routine installation has not yet been reverified.
 - Submit one consolidated report prepared jointly by all group members.
 - Submit a printed/spiral-bound report to the lab in-charge.
 - Attend the live lab demonstration; all members must be present. Each member must explain database design, SQL queries, connectivity, and their own contribution.
