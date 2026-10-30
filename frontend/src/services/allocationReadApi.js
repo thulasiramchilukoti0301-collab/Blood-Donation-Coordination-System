@@ -59,6 +59,18 @@ export function readAllocationPreview(data, expectedRequestId) {
     return { bloodUnitId: id(candidate.bloodUnitId), donorGroupCode: candidate.donorGroupCode,
       expiryDate: candidate.expiryDate, collectedAt: candidate.collectedAt };
   });
+  if (!Array.isArray(preview.allocations)) throw invalid();
+  const allocations = preview.allocations.map((row) => {
+    if (!['ALLOCATED', 'ISSUED'].includes(row?.allocationStatus) || !date(row.expiryDate)
+      || !groups.includes(row.donorGroupCode) || !text(row.allocatedAt)
+      || (row.allocationStatus === 'ISSUED' ? !text(row.issuedAt) || !text(row.handoffReference) : row.issuedAt !== null || row.handoffReference !== null)) throw invalid();
+    return { allocationId: id(row.allocationId), bloodUnitId: id(row.bloodUnitId), allocationStatus: row.allocationStatus,
+      allocatedAt: row.allocatedAt, issuedAt: row.issuedAt, handoffReference: row.handoffReference,
+      expiryDate: row.expiryDate, donorGroupCode: row.donorGroupCode };
+  });
+  if (new Set(allocations.map(row => row.allocationId)).size !== allocations.length
+    || allocations.filter(row => row.allocationStatus === 'ALLOCATED').length !== counts.allocated
+    || allocations.filter(row => row.allocationStatus === 'ISSUED').length !== counts.issued) throw invalid();
   if (new Set(candidates.map((candidate) => candidate.bloodUnitId)).size !== candidates.length) throw invalid();
   for (let index = 1; index < candidates.length; index++) {
     const prior = candidates[index - 1]; const next = candidates[index];
@@ -71,7 +83,7 @@ export function readAllocationPreview(data, expectedRequestId) {
   eligibleForAllocation: preview.eligibleForAllocation, intendedIssueDate: preview.intendedIssueDate,
   counts: { allocated: counts.allocated, issued: counts.issued, outstanding: counts.outstanding,
     availableCandidateCount: counts.availableCandidateCount, allocatableCount: counts.allocatableCount },
-  candidates, candidatePagination: { page: page.page, pageSize: page.pageSize, total: page.total, pageCount: page.pageCount } };
+  allocations, candidates, candidatePagination: { page: page.page, pageSize: page.pageSize, total: page.total, pageCount: page.pageCount } };
 }
 
 export function createAllocationReadApi(client) {

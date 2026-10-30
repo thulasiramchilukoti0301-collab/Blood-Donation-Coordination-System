@@ -15,21 +15,27 @@ export function createAllocationReadRepository(database) {
     async assertStorageReady() {
       const [tables] = await execute(`SELECT TABLE_NAME AS name FROM information_schema.TABLES
         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'
-          AND TABLE_NAME IN ('BloodGroup','BloodCompatibility','HospitalRequest','Hospital','BloodUnit','Donation','Allocation')`);
-      const expected = new Set(['BloodGroup','BloodCompatibility','HospitalRequest','Hospital','BloodUnit','Donation','Allocation']);
-      if (tables.length !== expected.size || tables.some((row) => !expected.delete(row.name))) throw allocationReadUnavailable();
+          AND TABLE_NAME IN ('BloodGroup','BloodCompatibility','HospitalRequest','Hospital','BloodUnit','Donation','Allocation','RequestStatusHistory','AuditEvent','Account','app_session')`);
+      const expected = new Set(['bloodgroup','bloodcompatibility','hospitalrequest','hospital','bloodunit','donation','allocation','requeststatushistory','auditevent','account','app_session']);
+      if (tables.length !== expected.size || tables.some((row) => !expected.delete(String(row.name).toLowerCase()))) throw allocationReadUnavailable();
       const [constraints] = await execute(`SELECT TABLE_NAME AS tableName, CONSTRAINT_NAME AS name, CONSTRAINT_TYPE AS type
         FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE()
           AND ((TABLE_NAME = 'BloodCompatibility' AND CONSTRAINT_NAME IN ('PRIMARY','fk_compatibility_donor','fk_compatibility_recipient'))
-            OR (TABLE_NAME = 'Allocation' AND CONSTRAINT_NAME IN ('PRIMARY','uq_allocation_active_blood_unit','fk_allocation_request','fk_allocation_unit','fk_allocation_actor')))`);
-      const required = new Set(['BloodCompatibility:PRIMARY:PRIMARY KEY', 'BloodCompatibility:fk_compatibility_donor:FOREIGN KEY',
-        'BloodCompatibility:fk_compatibility_recipient:FOREIGN KEY', 'Allocation:PRIMARY:PRIMARY KEY',
-        'Allocation:uq_allocation_active_blood_unit:UNIQUE', 'Allocation:fk_allocation_request:FOREIGN KEY',
-        'Allocation:fk_allocation_unit:FOREIGN KEY', 'Allocation:fk_allocation_actor:FOREIGN KEY']);
-      for (const row of constraints) required.delete(`${row.tableName}:${row.name}:${row.type}`);
+            OR (TABLE_NAME = 'Allocation' AND CONSTRAINT_NAME IN ('PRIMARY','uq_allocation_active_blood_unit','fk_allocation_request','fk_allocation_unit','fk_allocation_actor','ck_allocation_status','ck_allocation_issued_at','ck_allocation_cancelled_at','ck_allocation_cancel_reason')))`);
+      const required = new Set(['bloodcompatibility:PRIMARY:PRIMARY KEY', 'bloodcompatibility:fk_compatibility_donor:FOREIGN KEY',
+        'bloodcompatibility:fk_compatibility_recipient:FOREIGN KEY', 'allocation:PRIMARY:PRIMARY KEY',
+        'allocation:uq_allocation_active_blood_unit:UNIQUE', 'allocation:fk_allocation_request:FOREIGN KEY',
+        'allocation:fk_allocation_unit:FOREIGN KEY', 'allocation:fk_allocation_actor:FOREIGN KEY',
+        'allocation:ck_allocation_status:CHECK', 'allocation:ck_allocation_issued_at:CHECK',
+        'allocation:ck_allocation_cancelled_at:CHECK', 'allocation:ck_allocation_cancel_reason:CHECK']);
+      for (const row of constraints) required.delete(`${String(row.tableName).toLowerCase()}:${row.name}:${row.type}`);
       const [generated] = await execute(`SELECT EXTRA AS extra FROM information_schema.COLUMNS
         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Allocation' AND COLUMN_NAME = 'active_blood_unit_id'`);
-      if (required.size || generated.length !== 1 || !/STORED GENERATED/u.test(generated[0].extra)) throw allocationReadUnavailable();
+      const [triggers] = await execute(`SELECT TRIGGER_NAME AS name, ACTION_TIMING AS timing, EVENT_MANIPULATION AS event
+        FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = 'HospitalRequest'`);
+      const historyTrigger = triggers.find(row => row.name === 'trg_request_status_history_update');
+      if (required.size || generated.length !== 1 || !/STORED GENERATED/u.test(generated[0].extra)
+        || !historyTrigger || historyTrigger.timing !== 'AFTER' || historyTrigger.event !== 'UPDATE') throw allocationReadUnavailable();
     },
     async listCompatibility() {
       const [groupRows] = await execute(`SELECT CAST(blood_group_id AS CHAR) AS bloodGroupId, code, display_name AS displayName
@@ -60,6 +66,15 @@ export function createAllocationReadRepository(database) {
       const issued = Number(allocationCounts.issued);
       const outstanding = Number(request.quantityRequested) - allocated - issued;
       if (!Number.isSafeInteger(outstanding) || outstanding < 0) throw allocationReadUnavailable();
+      const [allocationRows] = await execute(`SELECT CAST(a.allocation_id AS CHAR) AS allocationId,
+          CAST(a.blood_unit_id AS CHAR) AS bloodUnitId, a.allocation_status AS allocationStatus,
+          DATE_FORMAT(a.allocated_at, '%Y-%m-%d %H:%i:%s') AS allocatedAt,
+          DATE_FORMAT(a.issued_at, '%Y-%m-%d %H:%i:%s') AS issuedAt, a.handoff_reference AS handoffReference,
+          DATE_FORMAT(u.expiry_date, '%Y-%m-%d') AS expiryDate, donor.code AS donorGroupCode
+        FROM Allocation a JOIN BloodUnit u ON u.blood_unit_id = a.blood_unit_id
+        JOIN BloodGroup donor ON donor.blood_group_id = u.blood_group_id
+        WHERE a.request_id = ? AND a.allocation_status IN ('ALLOCATED','ISSUED')
+        ORDER BY u.expiry_date, a.allocation_id`, [requestId]);
       const eligibleForAllocation = allocatableStatuses.includes(request.requestStatus) && outstanding > 0;
       let availableCandidateCount = 0;
       let allocatableCount = 0;
@@ -97,7 +112,8 @@ export function createAllocationReadRepository(database) {
         recipientGroupCode: request.recipientGroupCode, recipientGroupName: request.recipientGroupName,
         quantityRequested: Number(request.quantityRequested), requestStatus: request.requestStatus,
         hospitalName: request.hospitalName }, eligibleForAllocation, intendedIssueDate,
-      counts: { allocated, issued, outstanding, availableCandidateCount, allocatableCount }, candidates,
+      counts: { allocated, issued, outstanding, availableCandidateCount, allocatableCount },
+      allocations: allocationRows, candidates,
       candidatePagination: { page: candidatePage, pageSize: candidatePageSize, total: allocatableCount, pageCount: candidatePages },
       isBinding: false };
     },

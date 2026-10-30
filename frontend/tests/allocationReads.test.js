@@ -13,6 +13,7 @@ const matrix = { success: true, groups, pairs };
 const preview = { success: true, preview: { isBinding: false, intendedIssueDate: '2026-11-01', eligibleForAllocation: true,
   request: { requestId: '42', recipientGroupId: '4', recipientGroupCode: 'A+', recipientGroupName: 'A Positive', hospitalName: 'Real Hospital', quantityRequested: 2, requestStatus: 'UNDER_REVIEW' },
   counts: { allocated: 0, issued: 0, outstanding: 2, availableCandidateCount: 3, allocatableCount: 2 },
+  allocations: [],
   candidatePagination: { page: 1, pageSize: 25, total: 2, pageCount: 1 },
   candidates: [{ bloodUnitId: '19', donorGroupCode: 'O-', expiryDate: '2026-11-20', collectedAt: '2026-10-25 10:00:00' }] } };
 

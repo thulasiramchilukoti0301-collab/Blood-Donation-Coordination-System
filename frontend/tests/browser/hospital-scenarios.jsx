@@ -226,10 +226,11 @@ async function mount(path, options = {}) {
     if (config.url === '/admin/inventory/expiry/run' && method === 'post') {
       if (current.inventoryMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });
       if (current.inventoryMode === 'conflict') return errorResponse(config, 409, 'ALLOCATION_COORDINATION_REQUIRED', 'Allocated unit requires coordination.');
-      const due = current.units.filter(unit => unit.unitStatus === 'AVAILABLE' && unit.expiryDate <= new Date().toISOString().slice(0, 10));
+      const runDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const due = current.units.filter(unit => unit.unitStatus === 'AVAILABLE' && unit.expiryDate <= runDate);
       due.forEach(unit => { unit.unitStatus = 'EXPIRED'; unit.expiryDate = unit.expiryDate; });
-      return response(config, { success: true, result: { runDate: new Date().toISOString().slice(0, 10), checkedCount: current.units.length,
-        expiredCount: due.length, runAt: '2026-10-29T10:00:00+05:30', operationId: '00000000-0000-4000-8000-000000000001' } });
+      return response(config, { success: true, result: { runDate, checkedCount: current.units.length,
+        expiredCount: due.length, runAt: `${runDate}T10:00:00+05:30`, operationId: '00000000-0000-4000-8000-000000000001' } });
     }
     if (/^\/admin\/inventory\/[^/]+\/discard$/u.test(config.url) && method === 'post') {
       if (current.inventoryMode === 'timeout') throw Object.assign(new Error('Controlled timeout'), { config, code: 'ECONNABORTED' });

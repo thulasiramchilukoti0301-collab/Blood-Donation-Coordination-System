@@ -25,10 +25,12 @@ try {
   check(target.schemaName, baseSchema);
   check(Number(target.port), Number(process.env.DB_PORT));
   check(await pool.execute('SELECT 1'), await pool.execute('SELECT 1'));
-  for (const table of ['Account', 'Donor', 'Hospital', 'HospitalRequest', 'RequestStatusHistory', 'AuditEvent', 'Donation', 'BloodUnit']) {
+  for (const table of ['Account', 'Donor', 'Hospital', 'HospitalRequest', 'RequestStatusHistory', 'AuditEvent', 'Donation', 'BloodUnit', 'Allocation']) {
     const [[row]] = await pool.query(`SELECT COUNT(*) AS total FROM ${table}`);
     check(Number(row.total), 0, `Fresh disposable ${table} table starts empty.`);
   }
+  const [[compatibilityRows]] = await pool.query('SELECT COUNT(*) AS total, SUM(is_compatible) AS compatible FROM BloodCompatibility');
+  check([Number(compatibilityRows.total), Number(compatibilityRows.compatible)], [64, 27], 'Fresh disposable 009 matrix has all directed compatibility entries.');
 
   const adminEmail = 'integration-admin@example.invalid';
   const adminPassword = 'Disposable Admin9!';
@@ -327,8 +329,111 @@ try {
   const [[approvedEvents]] = await pool.execute(`SELECT COUNT(*) AS total FROM AuditEvent
     WHERE action_code = 'ACCOUNT_APPROVED' AND subject_type = 'Account' AND subject_id IN (?,?)`, [hospitalId, donorId]);
   check(Number(approvedEvents.total), 2, 'Admin approvals are also persisted audit events.');
-  console.log(`Disposable real HTTP/MySQL integration passed: ${checks} assertions; registration/approval, real booking check-in and eligibility decision, donation processing, release approval, AVAILABLE BloodUnit and shared audit operation, request create/review/cancel/history, dashboards/reports, persistence, CSRF and rollback.`);
-  console.log('Migration 009 was intentionally omitted; a test-only empty Allocation view enabled cancellation prechecks. Allocation preview against the real schema and allocation mutation/concurrency were not tested or enabled.');
+
+  const allocationRequestBody = { ...requestBody, quantityRequested: 1, priority: 'URGENT', note: 'Disposable Feature 8 request' };
+  const allocationRequest = await mutate('/hospitals/me/requests', hospitalAgain, 'POST', allocationRequestBody);
+  check(allocationRequest.response.status, 201, 'Feature 8 request is created through the real Hospital API.');
+  const allocationRequestId = allocationRequest.data.requestId;
+  const allocationReview = await mutate(`/admin/requests/${allocationRequestId}/review`, admin, 'POST', { decision: 'UNDER_REVIEW' });
+  check(allocationReview.response.status, 200, 'Feature 8 request enters the allocatable state.');
+  const allocationPreview = await request(`/admin/requests/${allocationRequestId}/allocation-preview?intendedIssueDate=${today}&candidatePage=1`, admin);
+  check(allocationPreview.response.status, 200, `FEFO preview reads real approved AVAILABLE units: ${JSON.stringify(allocationPreview.data)}`);
+  check(allocationPreview.data.preview.candidates.length, 1);
+  check(allocationPreview.data.preview.candidates[0].bloodUnitId, bloodUnitId);
+  const exactUnitIds = [bloodUnitId];
+  await pool.query(`CREATE TRIGGER e2e_fail_allocation_audit BEFORE INSERT ON AuditEvent FOR EACH ROW
+    BEGIN IF NEW.action_code = 'ALLOCATION_CREATED' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='E2E allocation rollback'; END IF; END`);
+  const failedReserve = await mutate(`/admin/requests/${allocationRequestId}/allocations`, admin, 'POST', {
+    bloodUnitIds: exactUnitIds, intendedIssueDate: today,
+  });
+  check(failedReserve.response.status, 503, 'Allocation audit failure returns a safe service error.');
+  const [[afterAllocationRollback]] = await pool.execute(`SELECT r.request_status AS requestStatus,
+      (SELECT COUNT(*) FROM Allocation WHERE request_id=r.request_id) AS allocations,
+      (SELECT COUNT(*) FROM RequestStatusHistory WHERE request_id=r.request_id) AS history
+    FROM HospitalRequest r WHERE r.request_id=?`, [allocationRequestId]);
+  check([afterAllocationRollback.requestStatus, Number(afterAllocationRollback.allocations), Number(afterAllocationRollback.history)],
+    ['UNDER_REVIEW', 0, 2], 'Audit failure rolls back unit, Allocation and request-history changes together.');
+  await pool.query('DROP TRIGGER e2e_fail_allocation_audit');
+  const reserveAttempts = await Promise.all([1, 2].map(() => mutate(`/admin/requests/${allocationRequestId}/allocations`, admin, 'POST', {
+    bloodUnitIds: exactUnitIds, intendedIssueDate: today,
+  })));
+  check(reserveAttempts.map(result => result.response.status).sort(), [201, 409], 'Concurrent exact-unit reservations serialize to one success and one conflict.');
+  const reserve = reserveAttempts.find(result => result.response.status === 201);
+  check(reserve.response.status, 201, 'Exact FEFO selection is atomically reserved.');
+  check(reserve.data.allocation.requestStatus, 'PARTIALLY_FULFILLED');
+  const allocationId = reserve.data.allocation.allocations[0].allocationId;
+  const [[reservedState]] = await pool.execute(`SELECT u.unit_status AS unitStatus, a.allocation_status AS allocationStatus,
+      r.request_status AS requestStatus FROM BloodUnit u JOIN Allocation a ON a.blood_unit_id=u.blood_unit_id
+      JOIN HospitalRequest r ON r.request_id=a.request_id WHERE a.allocation_id=?`, [allocationId]);
+  check(reservedState, { unitStatus: 'ALLOCATED', allocationStatus: 'ALLOCATED', requestStatus: 'PARTIALLY_FULFILLED' }, 'Reservation persists matching unit, allocation and request states.');
+  const duplicateReserve = await mutate(`/admin/requests/${allocationRequestId}/allocations`, admin, 'POST', {
+    bloodUnitIds: exactUnitIds, intendedIssueDate: today,
+  });
+  check(duplicateReserve.response.status, 409, 'A stale repeated preview cannot select replacement units or duplicate allocation.');
+  const handoffReference = 'E2E-HANDOFF-1';
+  await pool.query(`CREATE TRIGGER e2e_fail_issue_audit BEFORE INSERT ON AuditEvent FOR EACH ROW
+    BEGIN IF NEW.action_code = 'ALLOCATION_ISSUED' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='E2E issue rollback'; END IF; END`);
+  const failedIssue = await mutate(`/admin/allocations/${allocationId}/issue`, admin, 'POST', { handoffReference });
+  check(failedIssue.response.status, 503, 'Issue audit failure returns a safe service error.');
+  const [[afterIssueRollback]] = await pool.execute(`SELECT u.unit_status AS unitStatus, a.allocation_status AS allocationStatus,
+      r.request_status AS requestStatus FROM BloodUnit u JOIN Allocation a ON a.blood_unit_id=u.blood_unit_id
+      JOIN HospitalRequest r ON r.request_id=a.request_id WHERE a.allocation_id=?`, [allocationId]);
+  check(afterIssueRollback, { unitStatus: 'ALLOCATED', allocationStatus: 'ALLOCATED', requestStatus: 'PARTIALLY_FULFILLED' },
+    'Audit failure rolls back both issue status changes and request fulfillment.');
+  await pool.query('DROP TRIGGER e2e_fail_issue_audit');
+  const issueAttempts = await Promise.all([1, 2].map(() => mutate(`/admin/allocations/${allocationId}/issue`, admin, 'POST', { handoffReference })));
+  check(issueAttempts.map(result => result.response.status).sort(), [200, 409], 'Concurrent duplicate issuing records one handoff and one conflict.');
+  const issue = issueAttempts.find(result => result.response.status === 200);
+  check(issue.data.issue.requestStatus, 'FULFILLED');
+  const duplicateIssue = await mutate(`/admin/allocations/${allocationId}/issue`, admin, 'POST', { handoffReference });
+  check(duplicateIssue.response.status, 409, 'A repeated issue does not issue or audit twice.');
+  const [[issuedState]] = await pool.execute(`SELECT u.unit_status AS unitStatus, a.allocation_status AS allocationStatus,
+      a.handoff_reference AS handoffReference, r.request_status AS requestStatus
+    FROM BloodUnit u JOIN Allocation a ON a.blood_unit_id=u.blood_unit_id
+    JOIN HospitalRequest r ON r.request_id=a.request_id WHERE a.allocation_id=?`, [allocationId]);
+  check(issuedState, { unitStatus: 'ISSUED', allocationStatus: 'ISSUED', handoffReference, requestStatus: 'FULFILLED' }, 'Issue persists matching unit, allocation, handoff and fulfilled request state.');
+  const [allocationEvents] = await pool.execute(`SELECT action_code AS action, actor_account_id AS actorId,
+      subject_type AS subjectType, subject_id AS subjectId, reason_code AS reason, change_summary AS summary
+    FROM AuditEvent WHERE subject_type='Allocation' AND subject_id=? ORDER BY audit_event_id`, [allocationId]);
+  check(allocationEvents.map(row => ({ ...row, actorId: String(row.actorId), subjectId: String(row.subjectId) })), [
+    { action: 'ALLOCATION_CREATED', actorId: adminId, subjectType: 'Allocation', subjectId: allocationId, reason: null, summary: 'Blood unit reserved for hospital request' },
+    { action: 'ALLOCATION_ISSUED', actorId: adminId, subjectType: 'Allocation', subjectId: allocationId, reason: null, summary: 'Blood unit issued to hospital' },
+  ], 'One creation and one approved issue audit event persist for the allocation.');
+  const issuedLog = await request(`/admin/audit-events?subjectType=Allocation&subjectId=${allocationId}&page=1&pageSize=25`, admin);
+  check(issuedLog.response.status, 200);
+  check(issuedLog.data.events.map(row => row.actionCode).sort(), ['ALLOCATION_CREATED', 'ALLOCATION_ISSUED']);
+  const [allocationHistory] = await pool.execute(`SELECT old_status AS oldStatus, new_status AS newStatus,
+      CAST(changed_by_account_id AS CHAR) AS actorId, reason_code AS reasonCode FROM RequestStatusHistory
+    WHERE request_id=? ORDER BY request_status_history_id`, [allocationRequestId]);
+  check(allocationHistory.map(row => [row.oldStatus, row.newStatus, row.actorId, row.reasonCode]), [
+    [null, 'SUBMITTED', hospitalId, null], ['SUBMITTED', 'UNDER_REVIEW', adminId, 'REVIEW_STARTED'],
+    ['UNDER_REVIEW', 'PARTIALLY_FULFILLED', adminId, 'ALLOCATION_UPDATED'],
+    ['PARTIALLY_FULFILLED', 'FULFILLED', adminId, 'REQUEST_FULFILLED'],
+  ], 'RequestStatusHistory trigger records allocation and issue transitions exactly once.');
+  const refreshedInventory = await request('/inventory?unitStatus=ISSUED&page=1', admin);
+  check(refreshedInventory.response.status, 200, JSON.stringify(refreshedInventory.data));
+  check(refreshedInventory.data.units.some(unit => unit.bloodUnitId === bloodUnitId && unit.unitStatus === 'ISSUED'), true,
+    'Inventory reads the committed issue state.');
+  const [dashboardInventory] = await pool.execute(`SELECT bg.code AS bloodGroup, bu.unit_status AS status, COUNT(*) AS total
+    FROM BloodUnit bu JOIN BloodGroup bg ON bg.blood_group_id=bu.blood_group_id
+    WHERE bu.blood_unit_id=? GROUP BY bg.code, bu.unit_status`, [bloodUnitId]);
+  const refreshedAdminDashboard = await request('/admin/dashboard', admin);
+  check(refreshedAdminDashboard.response.status, 200);
+  check(refreshedAdminDashboard.data.inventory.some(row => row.bloodGroup === dashboardInventory[0].bloodGroup
+    && row.status === 'ISSUED' && Number(row.total) === 1), true, 'Admin dashboard reflects the committed issued inventory.');
+  check(refreshedAdminDashboard.data.requests.some(row => row.status === 'FULFILLED' && Number(row.total) === 1), true,
+    'Admin dashboard reflects the fulfilled request.');
+  const refreshedHospitalDashboard = await request('/hospitals/me/dashboard', hospitalAgain);
+  check(refreshedHospitalDashboard.data.requests.some(row => row.status === 'FULFILLED' && Number(row.total) === 1), true,
+    'Hospital dashboard reflects the fulfilled request.');
+  const refreshedInventoryReport = await request('/admin/reports/inventory', admin);
+  check(refreshedInventoryReport.data.inventory.some(row => row.bloodGroup === dashboardInventory[0].bloodGroup
+    && row.status === 'ISSUED' && Number(row.total) === 1), true, 'Inventory report reflects the committed issued inventory.');
+  const refreshedRequestReport = await request(`/admin/reports/requests?from=${today}&to=${today}&interval=DAY`, admin);
+  check(refreshedRequestReport.data.statuses.some(row => row.status === 'FULFILLED' && Number(row.quantity) === 1), true,
+    'Request report reflects the fulfilled request quantity.');
+  console.log(`Disposable real HTTP/MySQL integration passed: ${checks} assertions including atomic exact FEFO allocation, stale retry rejection, issue, audit/history, inventory reflection, dashboards/reports, auth/CSRF, and rollback.`);
+  console.log('Migrations 009, 010 and 012 were applied only to a fresh disposable database. No development database was contacted.');
 } finally {
   if (server) {
     server.closeAllConnections();

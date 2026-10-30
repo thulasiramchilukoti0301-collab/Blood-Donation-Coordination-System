@@ -59,9 +59,9 @@ test('read repository binds request, recipient group, issue date, and page value
   const result = await createAllocationReadRepository(database).readPreview('42', '2026-11-01', 1);
   assert.equal(result.counts.availableCandidateCount, 1);
   assert.equal(result.counts.allocatableCount, 1);
-  assert.deepEqual(calls.map((call) => call.values), [['42'], ['42'], ['8', '2026-11-01'], ['8', '2026-11-01', 1, 0]]);
-  assert.match(calls[3].sql, /ORDER BY u\.expiry_date, d\.collected_at, u\.blood_unit_id/u);
-  assert.match(calls[3].sql, /d\.release_status = 'APPROVED'/u);
+  assert.deepEqual(calls.map((call) => call.values), [['42'], ['42'], ['42'], ['8', '2026-11-01'], ['8', '2026-11-01', 1, 0]]);
+  assert.match(calls[4].sql, /ORDER BY u\.expiry_date, d\.collected_at, u\.blood_unit_id/u);
+  assert.match(calls[4].sql, /d\.release_status = 'APPROVED'/u);
 });
 
 test('routes require a current ACTIVE Admin session, return no-store, and fail closed for missing storage', async (t) => {
